@@ -141,7 +141,7 @@ func buildScript(delim, format string, maxsplit int, extended bool, setup, forea
 
 	// Format string as a Python f-string with triple-double-quote delimiters.
 	safeFormat := strings.ReplaceAll(format, `"""`, `\"\"\"`)
-	fmt.Fprintf(&sb, "    print(f\"\"\"%s\"\"\")\n", safeFormat)
+	fmt.Fprintf(&sb, "    try:\n        print(f\"\"\"%s\"\"\")\n    except IndexError:\n        pass\n", safeFormat)
 
 	return sb.String()
 }
