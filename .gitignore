@@ -1,0 +1,27 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Binary output
+bsy
+/dist/
+
+# Go build cache
+*.test
+*.out
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment
+.env
+.env.local
+
+# Dependency vendoring (if not committed)
+# vendor/
+babi
