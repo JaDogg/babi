@@ -31,6 +31,7 @@ import (
 	"github.com/jadogg/babi/internal/dt"
 	"github.com/jadogg/babi/internal/ed"
 	"github.com/jadogg/babi/internal/meta"
+	"github.com/jadogg/babi/internal/tag"
 	"github.com/jadogg/babi/internal/tree"
 	syncer "github.com/jadogg/babi/internal/sync"
 	"github.com/jadogg/babi/internal/tui"
@@ -40,14 +41,17 @@ import (
 	tuihex "github.com/jadogg/babi/internal/tui/hex"
 )
 
+var version = "dev" // set by -ldflags "-X main.version=vX.Y.Z" at build time
+
 var configPath string
 
 // ─── root ────────────────────────────────────────────────────────────────────
 
 var rootCmd = &cobra.Command{
-	Use:   "babi",
-	Short: "babi — file sync & git TUI",
-	Long:  "babi: file sync, commitizen commits, text editor, hex editor, and file manager.",
+	Use:     "babi",
+	Short:   "babi — file sync & git TUI",
+	Long:    "babi: file sync, commitizen commits, text editor, hex editor, and file manager.",
+	Version: version,
 }
 
 // ─── babi sync ───────────────────────────────────────────────────────────────
@@ -1667,7 +1671,7 @@ func main() {
 	pdfSplitCmd.Flags().String("pages", "", "split before these page numbers, comma-separated (e.g. 3,6,9)")
 	pdfCmd.AddCommand(pdfMergeCmd, pdfSplitCmd)
 
-	rootCmd.AddCommand(syncCmd, commitCmd, searchCmd, replaceCmd, editCmd, hexCmd, fmCmd, dtCmd, convertCmd, hashCmd, encodeCmd, genCmd, portCmd, logCmd, stashCmd, pdfCmd, meta.Command(), cf.Command(), tree.Command(), check.Command())
+	rootCmd.AddCommand(syncCmd, commitCmd, searchCmd, replaceCmd, editCmd, hexCmd, fmCmd, dtCmd, convertCmd, hashCmd, encodeCmd, genCmd, portCmd, logCmd, stashCmd, pdfCmd, meta.Command(), cf.Command(), tree.Command(), tag.Command(), check.Command())
 	initCobraColors()
 
 	if err := rootCmd.Execute(); err != nil {
