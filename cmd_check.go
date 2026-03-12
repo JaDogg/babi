@@ -1,0 +1,251 @@
+package main
+
+import (
+	"fmt"
+	"os/exec"
+	"runtime"
+	"strings"
+
+	"github.com/spf13/cobra"
+
+	cc "github.com/jadogg/babi/internal/clicolor"
+)
+
+type depEntry struct {
+	bin      string
+	commands string // babi commands that use it
+	brew     string // macOS install hint
+	apt      string // Debian/Ubuntu install hint
+	pacman   string // Arch install hint
+	note     string // shown when available instead of install hint
+	required bool   // required vs optional
+}
+
+// depGroup is a named set of dependencies where finding ANY one satisfies the group.
+// For groups with multiple entries, only one needs to be installed.
+type depGroup struct {
+	name    string
+	anyOne  bool // if true, only one entry needs to be present
+	entries []depEntry
+}
+
+var checkDeps = []depGroup{
+	{
+		name: "VERSION CONTROL",
+		entries: []depEntry{
+			{
+				bin:      "git",
+				commands: "babi commit, log, stash",
+				note:     "install via your OS package manager",
+				required: true,
+			},
+		},
+	},
+	{
+		name: "SEARCH",
+		entries: []depEntry{
+			{
+				bin:      "rg",
+				commands: "babi search, replace  (grep used as fallback)",
+				brew:     "brew install ripgrep",
+				apt:      "apt install ripgrep",
+				pacman:   "pacman -S ripgrep",
+			},
+		},
+	},
+	{
+		name: "MEDIA CONVERSION",
+		entries: []depEntry{
+			{
+				bin:      "ffmpeg",
+				commands: "babi convert  (video, audio, gif, frames)",
+				brew:     "brew install ffmpeg",
+				apt:      "apt install ffmpeg",
+				pacman:   "pacman -S ffmpeg",
+			},
+			{
+				bin:      "magick",
+				commands: "babi convert  (images — ImageMagick v7)",
+				brew:     "brew install imagemagick",
+				apt:      "apt install imagemagick",
+				pacman:   "pacman -S imagemagick",
+				note:     "ImageMagick v7+",
+			},
+		},
+	},
+	{
+		name: "DOCUMENT CONVERSION",
+		entries: []depEntry{
+			{
+				bin:      "pandoc",
+				commands: "babi convert  (md, html, pdf, docx, epub …)",
+				brew:     "brew install pandoc",
+				apt:      "apt install pandoc",
+				pacman:   "pacman -S pandoc",
+			},
+		},
+	},
+	{
+		name:   "NTP TIME SYNC",
+		anyOne: true,
+		entries: []depEntry{
+			{
+				bin:      "sntp",
+				commands: "babi dt ntp --sync",
+				note:     "usually bundled with macOS / ntp package",
+				brew:     "brew install ntp",
+				apt:      "apt install ntp",
+				pacman:   "pacman -S ntp",
+			},
+			{
+				bin:      "ntpdate",
+				commands: "babi dt ntp --sync  (fallback)",
+				brew:     "brew install ntp",
+				apt:      "apt install ntpdate",
+				pacman:   "pacman -S ntp",
+			},
+		},
+	},
+	{
+		name:   "PORT INSPECTION",
+		anyOne: true,
+		entries: []depEntry{
+			{
+				bin:      "lsof",
+				commands: "babi port  (macOS / Linux primary)",
+				note:     "usually pre-installed",
+				brew:     "brew install lsof",
+				apt:      "apt install lsof",
+				pacman:   "pacman -S lsof",
+			},
+			{
+				bin:      "ss",
+				commands: "babi port  (Linux fallback)",
+				note:     "part of iproute2",
+				apt:      "apt install iproute2",
+				pacman:   "pacman -S iproute2",
+			},
+		},
+	},
+}
+
+func installHint(e depEntry) string {
+	switch runtime.GOOS {
+	case "darwin":
+		if e.brew != "" {
+			return e.brew
+		}
+	case "linux":
+		if e.apt != "" {
+			return e.apt
+		}
+	}
+	// fallback: show brew then apt
+	if e.brew != "" {
+		return e.brew
+	}
+	if e.apt != "" {
+		return e.apt
+	}
+	return "see project docs"
+}
+
+var checkCmd = &cobra.Command{
+	Use:   "check",
+	Short: "Check for required third-party binaries",
+	Long:  "Checks which optional and required external tools are installed that babi uses.",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		type result struct {
+			entry depEntry
+			path  string
+			found bool
+		}
+
+		// Column widths
+		const binW = 10
+		const cmdW = 48
+
+		pad := func(s string, w int) string {
+			r := []rune(s)
+			if len(r) >= w {
+				return string(r[:w])
+			}
+			return s + strings.Repeat(" ", w-len(r))
+		}
+
+		totalOptional := 0
+		foundOptional := 0
+
+		fmt.Println()
+		fmt.Println(cc.Bold("babi check") + cc.Dim(" — third-party dependency status"))
+		fmt.Println()
+
+		for _, group := range checkDeps {
+			fmt.Println(cc.Dim("  " + group.name))
+
+			groupResults := make([]result, len(group.entries))
+			anyFound := false
+			for i, e := range group.entries {
+				p, err := exec.LookPath(e.bin)
+				found := err == nil
+				groupResults[i] = result{entry: e, path: p, found: found}
+				if found {
+					anyFound = true
+				}
+				if !e.required {
+					totalOptional++
+					if found {
+						foundOptional++
+					}
+				}
+			}
+
+			for _, r := range groupResults {
+				// For "anyOne" groups, dim entries that aren't strictly needed
+				// because another entry in the group is already found.
+				dimmed := group.anyOne && anyFound && !r.found
+
+				binStr := pad(r.entry.bin, binW)
+				cmdStr := pad(r.entry.commands, cmdW)
+
+				var status, detail string
+				if r.found {
+					status = cc.BoldGreen("✓")
+					if r.entry.note != "" {
+						detail = cc.Dim(r.entry.note)
+					} else {
+						detail = cc.Dim(r.path)
+					}
+					fmt.Printf("  %s  %s  %s  %s\n", status, cc.Bold(binStr), cc.Dim(cmdStr), detail)
+				} else if dimmed {
+					// present in group but not this specific binary — show as optional skip
+					status = cc.Dim("–")
+					detail = cc.Dim(installHint(r.entry))
+					fmt.Printf("  %s  %s  %s  %s\n", status, cc.Dim(binStr), cc.Dim(cmdStr), detail)
+				} else {
+					tag := ""
+					if r.entry.required {
+						tag = cc.BoldRed(" [required]")
+					}
+					status = cc.BoldRed("✗")
+					detail = cc.Yellow(installHint(r.entry))
+					fmt.Printf("  %s  %s  %s  %s%s\n", status, cc.Bold(binStr), cc.Dim(cmdStr), detail, tag)
+				}
+			}
+			fmt.Println()
+		}
+
+		// Summary
+		if totalOptional > 0 {
+			summary := fmt.Sprintf("%d / %d optional dependencies available", foundOptional, totalOptional)
+			if foundOptional == totalOptional {
+				fmt.Println(cc.BoldGreen("  ✓ " + summary))
+			} else {
+				fmt.Println(cc.Dim("  " + summary))
+			}
+			fmt.Println()
+		}
+
+		return nil
+	},
+}
