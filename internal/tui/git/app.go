@@ -77,7 +77,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.files = newFilesModel(msg.items, m.repoDir, m.width, m.height)
 		m.screen = screenFiles
-		return m, nil
+		return m, m.files.Init()
 
 	case navigateToFilesMsg:
 		if msg.reload {

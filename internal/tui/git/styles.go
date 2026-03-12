@@ -73,4 +73,7 @@ var (
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(colorFaint).
 			Padding(0, 2)
+
+	styleDiffAdd = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#1a7f37", Dark: "#3fb950"})
+	styleDiffDel = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#CF222E", Dark: "#F85149"})
 )

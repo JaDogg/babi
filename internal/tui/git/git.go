@@ -2,6 +2,7 @@ package git
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
@@ -65,6 +66,74 @@ func StageFiles(repoDir string, paths []string) error {
 	cmd := exec.Command("git", args...)
 	cmd.Dir = repoDir
 	return cmd.Run()
+}
+
+// UnstageFiles runs `git restore --staged -- <paths>`.
+func UnstageFiles(repoDir string, paths []string) error {
+	if len(paths) == 0 {
+		return nil
+	}
+	args := append([]string{"restore", "--staged", "--"}, paths...)
+	cmd := exec.Command("git", args...)
+	cmd.Dir = repoDir
+	return cmd.Run()
+}
+
+// StagedFiles returns paths that are currently staged (index != ' ').
+func StagedFiles(repoDir string) ([]string, error) {
+	files, err := GetStatus(repoDir)
+	if err != nil {
+		return nil, err
+	}
+	var staged []string
+	for _, f := range files {
+		if f.X != ' ' && f.X != '?' {
+			staged = append(staged, f.Path)
+		}
+	}
+	return staged, nil
+}
+
+// GetFileDiff returns a unified diff for the given file.
+// xy is the two-char porcelain status (e.g. "M ", " M", "??").
+// Staged changes come from --cached; unstaged from the working tree.
+// Untracked files are read directly and every line is prefixed with "+".
+func GetFileDiff(repoDir, path, xy string) (string, error) {
+	x, y := byte(' '), byte(' ')
+	if len(xy) >= 2 {
+		x, y = xy[0], xy[1]
+	}
+
+	// Untracked: show file contents as all-new lines
+	if x == '?' && y == '?' {
+		data, err := os.ReadFile(filepath.Join(repoDir, path))
+		if err != nil {
+			return "", err
+		}
+		var sb strings.Builder
+		for _, line := range strings.Split(string(data), "\n") {
+			sb.WriteString("+" + line + "\n")
+		}
+		return sb.String(), nil
+	}
+
+	var result strings.Builder
+
+	if x != ' ' && x != '?' {
+		cmd := exec.Command("git", "diff", "--cached", "--", path)
+		cmd.Dir = repoDir
+		out, _ := cmd.Output()
+		result.Write(out)
+	}
+
+	if y != ' ' && y != '?' {
+		cmd := exec.Command("git", "diff", "--", path)
+		cmd.Dir = repoDir
+		out, _ := cmd.Output()
+		result.Write(out)
+	}
+
+	return result.String(), nil
 }
 
 // CommitWithMessage runs `git commit -m message`.

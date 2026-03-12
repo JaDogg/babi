@@ -9,30 +9,61 @@ import (
 )
 
 type filesModel struct {
-	items   []DisplayItem
-	cursor  int
-	offset  int // scroll offset
-	width   int
-	height  int
-	repoDir string
-	err     string
+	items       []DisplayItem
+	cursor      int
+	offset      int // scroll offset for file list
+	diffContent string
+	diffOffset  int // scroll offset for diff panel
+	diffPath    string
+	width       int
+	height      int
+	repoDir     string
+	err         string
 }
 
 func newFilesModel(items []DisplayItem, repoDir string, width, height int) filesModel {
-	return filesModel{
+	m := filesModel{
 		items:   items,
 		repoDir: repoDir,
 		width:   width,
 		height:  height,
 	}
+	return m
 }
 
-func (m filesModel) visibleHeight() int {
-	h := m.height - 2 // header + footer
+func (m filesModel) listWidth() int  { return (m.width * 2) / 5 }
+func (m filesModel) diffWidth() int  { return m.width - m.listWidth() - 1 }
+func (m filesModel) contentH() int {
+	h := m.height - 2
 	if h < 1 {
 		h = 1
 	}
 	return h
+}
+
+func (m filesModel) visibleHeight() int {
+	h := m.contentH()
+	if h < 1 {
+		h = 1
+	}
+	return h
+}
+
+func (m filesModel) loadDiffCmd() tea.Cmd {
+	if m.cursor < 0 || m.cursor >= len(m.items) {
+		return nil
+	}
+	it := m.items[m.cursor]
+	if it.IsDir {
+		return nil
+	}
+	path := it.Path
+	xy := it.Status
+	repoDir := m.repoDir
+	return func() tea.Msg {
+		content, _ := GetFileDiff(repoDir, path, xy)
+		return diffLoadedMsg{path: path, content: content}
+	}
 }
 
 func (m filesModel) Update(msg tea.Msg) (filesModel, tea.Cmd) {
@@ -40,6 +71,12 @@ func (m filesModel) Update(msg tea.Msg) (filesModel, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+
+	case diffLoadedMsg:
+		if msg.path == m.currentFilePath() {
+			m.diffContent = msg.content
+			m.diffOffset = 0
+		}
 
 	case tea.KeyMsg:
 		m.err = ""
@@ -50,6 +87,9 @@ func (m filesModel) Update(msg tea.Msg) (filesModel, tea.Cmd) {
 				if m.cursor < m.offset {
 					m.offset = m.cursor
 				}
+				m.diffContent = ""
+				m.diffOffset = 0
+				return m, m.loadDiffCmd()
 			}
 		case "down", "j":
 			if m.cursor < len(m.items)-1 {
@@ -58,6 +98,9 @@ func (m filesModel) Update(msg tea.Msg) (filesModel, tea.Cmd) {
 				if m.cursor >= m.offset+vh {
 					m.offset = m.cursor - vh + 1
 				}
+				m.diffContent = ""
+				m.diffOffset = 0
+				return m, m.loadDiffCmd()
 			}
 		case " ":
 			m.items = m.toggle(m.cursor)
@@ -73,6 +116,21 @@ func (m filesModel) Update(msg tea.Msg) (filesModel, tea.Cmd) {
 					m.items[i].Selected = false
 				}
 			}
+		case "pgdown", "ctrl+d":
+			diffLines := strings.Count(m.diffContent, "\n")
+			maxOff := diffLines - m.contentH() + 1
+			if maxOff < 0 {
+				maxOff = 0
+			}
+			m.diffOffset += m.contentH() / 2
+			if m.diffOffset > maxOff {
+				m.diffOffset = maxOff
+			}
+		case "pgup", "ctrl+u":
+			m.diffOffset -= m.contentH() / 2
+			if m.diffOffset < 0 {
+				m.diffOffset = 0
+			}
 		case "c", "enter":
 			paths := SelectedPaths(m.items)
 			if len(paths) == 0 {
@@ -87,6 +145,17 @@ func (m filesModel) Update(msg tea.Msg) (filesModel, tea.Cmd) {
 	return m, nil
 }
 
+func (m filesModel) currentFilePath() string {
+	if m.cursor < 0 || m.cursor >= len(m.items) {
+		return ""
+	}
+	it := m.items[m.cursor]
+	if it.IsDir {
+		return ""
+	}
+	return it.Path
+}
+
 func (m filesModel) toggle(idx int) []DisplayItem {
 	if idx < 0 || idx >= len(m.items) {
 		return m.items
@@ -99,6 +168,11 @@ func (m filesModel) toggle(idx int) []DisplayItem {
 	copy(result, m.items)
 	result[idx].Selected = !result[idx].Selected
 	return result
+}
+
+// Init fires the initial diff load for cursor=0.
+func (m filesModel) Init() tea.Cmd {
+	return m.loadDiffCmd()
 }
 
 func (m filesModel) View() string {
@@ -129,14 +203,29 @@ func (m filesModel) View() string {
 		"space", "toggle",
 		"a", "all",
 		"n", "none",
+		"pgdn/pgup", "scroll diff",
 		"c", "commit",
 		"q", "quit",
 	)
 
 	contentH := h - 2
-	content := m.renderList(w, contentH)
+	listW := m.listWidth()
+	diffW := m.diffWidth()
 
-	return header + "\n" + padToHeight(content, contentH) + "\n" + footer
+	listPane := m.renderList(listW, contentH)
+	diffPane := m.renderDiff(diffW, contentH)
+
+	sep := lipgloss.NewStyle().
+		Foreground(colorFaint).
+		Render(strings.Repeat("│\n", contentH))
+
+	body := lipgloss.JoinHorizontal(lipgloss.Top,
+		padToHeight(listPane, contentH),
+		sep,
+		padToHeight(diffPane, contentH),
+	)
+
+	return header + "\n" + body + "\n" + footer
 }
 
 func (m filesModel) renderList(w, h int) string {
@@ -145,7 +234,7 @@ func (m filesModel) renderList(w, h int) string {
 			Width(w).Height(h).
 			Align(lipgloss.Center, lipgloss.Center).
 			Foreground(colorMuted).
-			Render("Nothing to commit — working tree clean.")
+			Render("Nothing to commit.")
 	}
 
 	vh := m.visibleHeight()
@@ -186,7 +275,6 @@ func (m filesModel) renderItem(it DisplayItem, selected bool, w int) string {
 		return cursor + indent + cb + " " + name
 	}
 
-	// File row
 	cb := styleCheckboxOff.Render("[ ]")
 	if it.Selected {
 		cb = styleCheckboxOn.Render("[x]")
@@ -213,7 +301,6 @@ func (m filesModel) renderItem(it DisplayItem, selected bool, w int) string {
 		cursor = styleSelected.Render("> ")
 	}
 
-	// Right-align status
 	left := cursor + indent + cb + " " + nameStr
 	leftW := lipgloss.Width(left)
 	statusW := lipgloss.Width(statusStyled)
@@ -222,4 +309,67 @@ func (m filesModel) renderItem(it DisplayItem, selected bool, w int) string {
 		gap = 1
 	}
 	return left + strings.Repeat(" ", gap) + statusStyled
+}
+
+func (m filesModel) renderDiff(w, h int) string {
+	if m.diffContent == "" {
+		it := m.currentItem()
+		var placeholder string
+		if it == nil || it.IsDir {
+			placeholder = "select a file to see diff"
+		} else {
+			placeholder = "loading…"
+		}
+		return lipgloss.NewStyle().
+			Width(w).Height(h).
+			Align(lipgloss.Center, lipgloss.Center).
+			Foreground(colorMuted).
+			Render(placeholder)
+	}
+
+	lines := strings.Split(strings.TrimRight(m.diffContent, "\n"), "\n")
+
+	// Apply vertical scroll
+	if m.diffOffset > 0 && m.diffOffset < len(lines) {
+		lines = lines[m.diffOffset:]
+	}
+	if len(lines) > h {
+		lines = lines[:h]
+	}
+
+	var sb strings.Builder
+	for _, line := range lines {
+		sb.WriteString(m.colorDiffLine(line, w) + "\n")
+	}
+	return sb.String()
+}
+
+func (m filesModel) currentItem() *DisplayItem {
+	if m.cursor < 0 || m.cursor >= len(m.items) {
+		return nil
+	}
+	it := m.items[m.cursor]
+	return &it
+}
+
+func (m filesModel) colorDiffLine(line string, w int) string {
+	// Truncate to panel width
+	if lipgloss.Width(line) > w {
+		line = line[:w]
+	}
+	if len(line) == 0 {
+		return line
+	}
+	switch {
+	case strings.HasPrefix(line, "+++") || strings.HasPrefix(line, "---"):
+		return styleSubtle.Render(line)
+	case strings.HasPrefix(line, "@@"):
+		return lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#0088CC", Dark: "#56B6C2"}).Render(line)
+	case line[0] == '+':
+		return styleDiffAdd.Render(line)
+	case line[0] == '-':
+		return styleDiffDel.Render(line)
+	default:
+		return line
+	}
 }

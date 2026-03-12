@@ -8,3 +8,7 @@ type navigateToResultMsg struct {
 	err    error
 }
 type commitDoneMsg struct{}
+type diffLoadedMsg struct {
+	path    string
+	content string
+}

@@ -156,10 +156,28 @@ func (m commitModel) Update(msg tea.Msg) (commitModel, tea.Cmd) {
 
 func (m commitModel) doCommit() tea.Cmd {
 	msg := m.buildMessage()
-	files := m.files
+	selected := m.files
 	repoDir := m.repoDir
 	return func() tea.Msg {
-		if err := StageFiles(repoDir, files); err != nil {
+		// Unstage any file that is currently staged but not in the selected list.
+		staged, err := StagedFiles(repoDir)
+		if err != nil {
+			return navigateToResultMsg{err: err}
+		}
+		selectedSet := make(map[string]bool, len(selected))
+		for _, p := range selected {
+			selectedSet[p] = true
+		}
+		var toUnstage []string
+		for _, p := range staged {
+			if !selectedSet[p] {
+				toUnstage = append(toUnstage, p)
+			}
+		}
+		if err := UnstageFiles(repoDir, toUnstage); err != nil {
+			return navigateToResultMsg{err: err}
+		}
+		if err := StageFiles(repoDir, selected); err != nil {
 			return navigateToResultMsg{err: err}
 		}
 		out, err := CommitWithMessage(repoDir, msg)
