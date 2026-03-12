@@ -154,51 +154,70 @@ type DisplayItem struct {
 	Selected bool
 }
 
-// BuildItems creates a grouped display list from git status files.
+const maxTreeDepth = 10
+
+// BuildItems creates a tree-structured display list from git status files,
+// showing directory headers up to maxTreeDepth levels deep.
 func BuildItems(files []FileStatus) []DisplayItem {
-	type group struct {
-		dir   string
-		files []FileStatus
+	type node struct {
+		name     string
+		fullPath string
+		subdirs  map[string]*node
+		order    []string // subdir names in insertion order (sorted at render time)
+		files    []FileStatus
 	}
-	seen := make(map[string]int)
-	var groups []group
+	newNode := func(name, fullPath string) *node {
+		return &node{name: name, fullPath: fullPath, subdirs: map[string]*node{}}
+	}
+	root := newNode("", "")
+
 	for _, f := range files {
 		dir := filepath.Dir(f.Path)
 		if dir == "." {
 			dir = ""
 		}
-		if idx, ok := seen[dir]; ok {
-			groups[idx].files = append(groups[idx].files, f)
-		} else {
-			seen[dir] = len(groups)
-			groups = append(groups, group{dir: dir, files: []FileStatus{f}})
+
+		cur := root
+		if dir != "" {
+			segs := strings.Split(dir, "/")
+			if len(segs) > maxTreeDepth {
+				segs = segs[:maxTreeDepth]
+			}
+			for _, seg := range segs {
+				if _, exists := cur.subdirs[seg]; !exists {
+					childPath := seg
+					if cur.fullPath != "" {
+						childPath = cur.fullPath + "/" + seg
+					}
+					child := newNode(seg, childPath)
+					cur.subdirs[seg] = child
+					cur.order = append(cur.order, seg)
+				}
+				cur = cur.subdirs[seg]
+			}
 		}
+		cur.files = append(cur.files, f)
 	}
-	// Sort: root first, then alphabetical
-	sort.Slice(groups, func(i, j int) bool {
-		if groups[i].dir == "" {
-			return true
-		}
-		if groups[j].dir == "" {
-			return false
-		}
-		return groups[i].dir < groups[j].dir
-	})
 
 	var items []DisplayItem
-	for _, g := range groups {
-		if g.dir != "" {
+	var flatten func(n *node, depth int)
+	flatten = func(n *node, depth int) {
+		// Subdirectories sorted alphabetically, then files sorted alphabetically.
+		sort.Strings(n.order)
+		for _, seg := range n.order {
+			child := n.subdirs[seg]
 			items = append(items, DisplayItem{
 				IsDir: true,
-				Path:  g.dir,
-				Name:  g.dir + "/",
+				Path:  child.fullPath,
+				Name:  child.name + "/",
+				Depth: depth,
 			})
+			flatten(child, depth+1)
 		}
-		for _, f := range g.files {
-			depth := 0
-			if g.dir != "" {
-				depth = 1
-			}
+		sort.Slice(n.files, func(i, j int) bool {
+			return n.files[i].Path < n.files[j].Path
+		})
+		for _, f := range n.files {
 			items = append(items, DisplayItem{
 				IsDir:    false,
 				Path:     f.Path,
@@ -209,6 +228,7 @@ func BuildItems(files []FileStatus) []DisplayItem {
 			})
 		}
 	}
+	flatten(root, 0)
 	return items
 }
 
