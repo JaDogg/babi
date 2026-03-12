@@ -126,6 +126,31 @@ var deps = []depGroup{
 			},
 		},
 	},
+	{
+		name:   "PYTHON",
+		anyOne: true,
+		entries: []depEntry{
+			{
+				bin:      "python3",
+				commands: "babi cf",
+				brew:     "brew install python",
+				apt:      "apt install python3",
+				pacman:   "pacman -S python",
+			},
+			{
+				bin:      "python",
+				commands: "babi cf  (fallback)",
+				brew:     "brew install python",
+				apt:      "apt install python3",
+				pacman:   "pacman -S python",
+			},
+			{
+				bin:      "py",
+				commands: "babi cf  (Windows launcher fallback)",
+				note:     "Windows Python Launcher",
+			},
+		},
+	},
 }
 
 func installHint(e depEntry) string {
