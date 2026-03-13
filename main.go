@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -659,10 +660,17 @@ var dtNTPCmd = &cobra.Command{
 					cc.BoldYellow("Sync:"))
 				return nil
 			}
-			fmt.Printf("\n%s sudo %s %s\n",
-				cc.Dim("Running:"), ntpBin, strings.Join(ntpArgs, " "))
-			syncArgs := append([]string{ntpBin}, ntpArgs...)
-			c := exec.Command("sudo", syncArgs...)
+			var c *exec.Cmd
+			if runtime.GOOS == "windows" {
+				fmt.Printf("\n%s %s %s\n",
+					cc.Dim("Running:"), ntpBin, strings.Join(ntpArgs, " "))
+				c = exec.Command(ntpBin, ntpArgs...)
+			} else {
+				fmt.Printf("\n%s sudo %s %s\n",
+					cc.Dim("Running:"), ntpBin, strings.Join(ntpArgs, " "))
+				syncArgs := append([]string{ntpBin}, ntpArgs...)
+				c = exec.Command("sudo", syncArgs...)
+			}
 			c.Stdout = os.Stdout
 			c.Stderr = os.Stderr
 			return c.Run()
@@ -673,8 +681,12 @@ var dtNTPCmd = &cobra.Command{
 			absAvg = -absAvg
 		}
 		if absAvg > time.Second {
-			fmt.Printf("\n%s clock is off by more than 1s — run %s (requires sudo) to correct it.\n",
-				cc.BoldYellow("Hint:"), cc.Cyan("'babi dt ntp --sync'"))
+			hint := "'babi dt ntp --sync'"
+			if runtime.GOOS == "windows" {
+				hint = "'babi dt ntp --sync' (requires admin)"
+			}
+			fmt.Printf("\n%s clock is off by more than 1s — run %s to correct it.\n",
+				cc.BoldYellow("Hint:"), cc.Cyan(hint))
 		}
 		return nil
 	},
@@ -697,6 +709,10 @@ func ntpOffsetColor(offset time.Duration, s string) string {
 }
 
 func ntpSyncCmd(results []dt.NTPResult) (string, []string) {
+	if runtime.GOOS == "windows" {
+		// w32tm is built into Windows Vista+; /resync applies correction, /force skips the guard interval
+		return "w32tm", []string{"/resync", "/force"}
+	}
 	server := "pool.ntp.org"
 	for _, r := range results {
 		if r.Err == nil {
@@ -1371,7 +1387,12 @@ var portCmd = &cobra.Command{
 		}
 		if portKill {
 			for _, p := range procs {
-				killCmd := exec.Command("kill", "-9", p.pid)
+				var killCmd *exec.Cmd
+				if runtime.GOOS == "windows" {
+					killCmd = exec.Command("taskkill", "/F", "/PID", p.pid)
+				} else {
+					killCmd = exec.Command("kill", "-9", p.pid)
+				}
 				if err := killCmd.Run(); err != nil {
 					fmt.Printf("%s killing pid %s: %v\n", cc.BoldRed("error"), p.pid, err)
 				} else {
@@ -1386,6 +1407,28 @@ var portCmd = &cobra.Command{
 var portListCmd = &cobra.Command{
 	Use: "list", Short: "List all listening ports",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if runtime.GOOS == "windows" {
+			out, err := exec.Command("netstat", "-ano").Output()
+			if err != nil {
+				return fmt.Errorf("netstat not available: %w", err)
+			}
+			fmt.Printf("%-5s %-45s %-45s %-12s %s\n",
+				cc.BoldCyan("Proto"), cc.BoldCyan("Local Address"),
+				cc.BoldCyan("Foreign Address"), cc.BoldCyan("State"), cc.BoldCyan("PID"))
+			for _, line := range strings.Split(string(out), "\n") {
+				fields := strings.Fields(line)
+				// TCP: Proto Local Foreign State PID (5 fields)
+				// UDP: Proto Local Foreign PID    (4 fields, no state)
+				if len(fields) == 5 && strings.EqualFold(fields[3], "LISTENING") {
+					fmt.Printf("%-5s %-45s %-45s %-12s %s\n",
+						fields[0], fields[1], fields[2], fields[3], fields[4])
+				} else if len(fields) == 4 && strings.EqualFold(fields[0], "UDP") {
+					fmt.Printf("%-5s %-45s %-45s %-12s %s\n",
+						fields[0], fields[1], fields[2], "", fields[3])
+				}
+			}
+			return nil
+		}
 		out, err := exec.Command("lsof", "-iTCP", "-iUDP", "-n", "-P",
 			"-sTCP:LISTEN").Output()
 		if err != nil {
@@ -1416,6 +1459,9 @@ type procInfo struct {
 }
 
 func portProcs(port string) ([]procInfo, error) {
+	if runtime.GOOS == "windows" {
+		return portProcsWindows(port)
+	}
 	out, err := exec.Command("lsof", "-i:"+port, "-n", "-P", "-F", "cpn").Output()
 	if err != nil && len(out) == 0 {
 		return nil, nil // nothing on that port
@@ -1448,6 +1494,55 @@ func portProcs(port string) ([]procInfo, error) {
 		}
 	}
 	return unique, nil
+}
+
+// portProcsWindows parses `netstat -ano` output to find processes on a port.
+func portProcsWindows(port string) ([]procInfo, error) {
+	out, err := exec.Command("netstat", "-ano").Output()
+	if err != nil {
+		return nil, err
+	}
+	seen := map[string]bool{}
+	var procs []procInfo
+	for _, line := range strings.Split(string(out), "\n") {
+		fields := strings.Fields(line)
+		// TCP LISTENING: Proto Local Foreign State PID
+		if len(fields) == 5 && strings.EqualFold(fields[3], "LISTENING") {
+			if strings.HasSuffix(fields[1], ":"+port) {
+				pid := strings.TrimSpace(fields[4])
+				if !seen[pid] {
+					seen[pid] = true
+					procs = append(procs, procInfo{pid: pid, name: winProcName(pid)})
+				}
+			}
+		}
+		// UDP: Proto Local Foreign PID (no state)
+		if len(fields) == 4 && strings.EqualFold(fields[0], "UDP") {
+			if strings.HasSuffix(fields[1], ":"+port) {
+				pid := strings.TrimSpace(fields[3])
+				if !seen[pid] {
+					seen[pid] = true
+					procs = append(procs, procInfo{pid: pid, name: winProcName(pid)})
+				}
+			}
+		}
+	}
+	return procs, nil
+}
+
+// winProcName looks up a process name by PID using tasklist.
+func winProcName(pid string) string {
+	out, err := exec.Command("tasklist", "/FI", "PID eq "+pid, "/FO", "CSV", "/NH").Output()
+	if err != nil {
+		return "unknown"
+	}
+	line := strings.TrimSpace(string(out))
+	if line == "" || strings.HasPrefix(line, "INFO:") {
+		return "unknown"
+	}
+	// CSV: "process.exe","1234","Console","1","1,234 K"
+	parts := strings.SplitN(line, ",", 2)
+	return strings.Trim(parts[0], "\"")
 }
 
 // ─── babi log ─────────────────────────────────────────────────────────────────

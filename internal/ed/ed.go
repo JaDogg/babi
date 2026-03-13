@@ -1,6 +1,7 @@
 package ed
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"os"
@@ -64,25 +65,43 @@ func HasRipgrep() bool {
 	return err == nil
 }
 
-// Search runs a search using rg (or grep as fallback) and streams output to w.
+// hasGrep reports whether grep is on PATH.
+func hasGrep() bool {
+	_, err := exec.LookPath("grep")
+	return err == nil
+}
+
+// Search runs a search using rg, grep, or a pure-Go fallback (in that order).
 func Search(w io.Writer, pattern, path string, opts SearchOpts) error {
-	var cmd *exec.Cmd
 	if HasRipgrep() {
-		cmd = buildRgCmd(pattern, path, opts)
-	} else {
-		fmt.Fprintln(w, "[babi ed] note: ripgrep not found, falling back to grep (--type and --hidden flags unavailable)")
-		cmd = buildGrepCmd(pattern, path, opts)
-	}
-	cmd.Stdout = w
-	cmd.Stderr = os.Stderr
-	err := cmd.Run()
-	if err != nil {
-		if ex, ok := err.(*exec.ExitError); ok && ex.ExitCode() == 1 {
-			return nil // exit 1 = no matches, not an error
+		cmd := buildRgCmd(pattern, path, opts)
+		cmd.Stdout = w
+		cmd.Stderr = os.Stderr
+		err := cmd.Run()
+		if err != nil {
+			if ex, ok := err.(*exec.ExitError); ok && ex.ExitCode() == 1 {
+				return nil
+			}
+			return err
 		}
-		return err
+		return nil
 	}
-	return nil
+	if hasGrep() {
+		fmt.Fprintln(w, "[babi ed] note: ripgrep not found, falling back to grep (--type and --hidden flags unavailable)")
+		cmd := buildGrepCmd(pattern, path, opts)
+		cmd.Stdout = w
+		cmd.Stderr = os.Stderr
+		err := cmd.Run()
+		if err != nil {
+			if ex, ok := err.(*exec.ExitError); ok && ex.ExitCode() == 1 {
+				return nil
+			}
+			return err
+		}
+		return nil
+	}
+	fmt.Fprintln(w, "[babi ed] note: ripgrep and grep not found, using built-in search (--hidden flag unavailable)")
+	return searchGo(w, pattern, path, opts)
 }
 
 func buildRgCmd(pattern, path string, opts SearchOpts) *exec.Cmd {
@@ -286,6 +305,73 @@ func collectFiles(root, fileType, glob string, hidden bool) ([]string, error) {
 		return nil
 	})
 	return files, err
+}
+
+// searchGo is a pure-Go fallback for Search used when neither rg nor grep is available.
+func searchGo(w io.Writer, pattern, path string, opts SearchOpts) error {
+	prefix := ""
+	if opts.IgnoreCase {
+		prefix = "(?i)"
+	}
+	re, err := regexp.Compile(prefix + pattern)
+	if err != nil {
+		return fmt.Errorf("invalid pattern %q: %w", pattern, err)
+	}
+
+	if path == "" {
+		path = "."
+	}
+
+	files, err := collectFiles(path, opts.FileType, opts.Glob, opts.Hidden)
+	if err != nil {
+		return err
+	}
+
+	for _, f := range files {
+		fh, err := os.Open(f)
+		if err != nil {
+			continue
+		}
+		var lines []string
+		sc := bufio.NewScanner(fh)
+		for sc.Scan() {
+			lines = append(lines, sc.Text())
+		}
+		fh.Close()
+
+		if opts.FilesOnly {
+			for _, line := range lines {
+				if re.MatchString(line) {
+					fmt.Fprintln(w, f)
+					break
+				}
+			}
+			continue
+		}
+
+		for i, line := range lines {
+			if !re.MatchString(line) {
+				continue
+			}
+			lineNo := i + 1
+			start := i - opts.ContextBefore
+			if start < 0 {
+				start = 0
+			}
+			end := i + opts.ContextAfter
+			if end >= len(lines) {
+				end = len(lines) - 1
+			}
+			for j := start; j <= end; j++ {
+				sep := ":"
+				if j != i {
+					sep = "-"
+				}
+				fmt.Fprintf(w, "%s:%d%s%s\n", f, lineNo+(j-i), sep, lines[j])
+			}
+		}
+	}
+	return nil
 }
 
 // isBinary returns true if data looks like a binary file.
