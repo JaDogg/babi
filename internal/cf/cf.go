@@ -23,7 +23,11 @@ Reads from [file] or stdin. Requires Python (python3, python, or py).
   babi cf -E '\s+' '{part[0]}/{part[1]}'
   babi cf --setup='total=0' --foreach='total+=float(part[0])' ',' '{total:.2f}'
   babi cf --filter='^ERROR' ' ' '{part[1]}: {part[2]}' app.log
+  babi cf --filter-after='float(part[1]) > 100' ',' '{part[0]}: {part[1]}' data.csv
   babi cf ' ' '{part[0]}' --run 'echo {output}'
+  babi cf --skip=1 ',' '{part[0]}' data.csv
+  babi cf --strip ',' '{part[0]}: {part[1]}' data.csv
+  babi cf --join=', ' ' ' '{part[0]}' names.txt
 
 Variables available in format/setup/foreach:
   n       line index (0-based, from enumerate)
@@ -37,6 +41,11 @@ Variables available in format/setup/foreach:
 	c.Flags().StringP("setup", "s", "", "Python code to run once before the loop")
 	c.Flags().StringP("foreach", "f", "", "Python code to run inside the loop, before formatting")
 	c.Flags().StringP("filter", "F", "", "only process lines matching this regex (applied before split)")
+	c.Flags().String("filter-after", "", "skip line if this Python expression is false (has access to part, n, line)")
+	c.Flags().IntP("skip", "k", 0, "skip the first N lines of input (e.g. headers)")
+	c.Flags().IntP("limit", "l", 0, "stop after emitting N lines of output (0 = unlimited)")
+	c.Flags().Bool("strip", false, "strip whitespace from each field after splitting")
+	c.Flags().String("join", "", "join all output lines with this separator instead of newlines")
 	c.Flags().Bool("color", false, "force ANSI color output even when stdout is not a TTY")
 	c.Flags().String("run", "", "shell command to execute per line; use {output} for the formatted result")
 	c.Flags().Bool("debug", false, "print the generated Python script to stderr instead of running it")
@@ -52,11 +61,16 @@ func run(cmd *cobra.Command, args []string) error {
 	setup, _ := cmd.Flags().GetString("setup")
 	foreach, _ := cmd.Flags().GetString("foreach")
 	filter, _ := cmd.Flags().GetString("filter")
+	filterAfter, _ := cmd.Flags().GetString("filter-after")
+	skip, _ := cmd.Flags().GetInt("skip")
+	limit, _ := cmd.Flags().GetInt("limit")
+	strip, _ := cmd.Flags().GetBool("strip")
+	join, _ := cmd.Flags().GetString("join")
 	color, _ := cmd.Flags().GetBool("color")
 	run, _ := cmd.Flags().GetString("run")
 	debug, _ := cmd.Flags().GetBool("debug")
 
-	script := buildScript(delim, format, maxsplit, extended, setup, foreach, filter, run)
+	script := buildScript(delim, format, maxsplit, extended, setup, foreach, filter, filterAfter, run, skip, limit, strip, join)
 
 	if debug {
 		fmt.Fprintf(os.Stderr, "# generated Python script\n%s\n", script)
@@ -107,7 +121,7 @@ func run(cmd *cobra.Command, args []string) error {
 }
 
 // buildScript generates the Python script that will be executed.
-func buildScript(delim, format string, maxsplit int, extended bool, setup, foreach, filter, run string) string {
+func buildScript(delim, format string, maxsplit int, extended bool, setup, foreach, filter, filterAfter, run string, skip, limit int, strip bool, join string) string {
 	var sb strings.Builder
 
 	sb.WriteString("import sys\n")
@@ -127,8 +141,20 @@ func buildScript(delim, format string, maxsplit int, extended bool, setup, forea
 		sb.WriteString("\n")
 	}
 
+	// Buffer for --join: collect results before printing.
+	if join != "" && run == "" {
+		sb.WriteString("_results = []\n")
+	}
+	if limit > 0 {
+		sb.WriteString("_emitted = 0\n")
+	}
+
 	sb.WriteString("for n, line in enumerate(sys.stdin):\n")
 	sb.WriteString("    line = line.rstrip('\\n')\n")
+
+	if skip > 0 {
+		fmt.Fprintf(&sb, "    if n < %d:\n        continue\n", skip)
+	}
 
 	if filter != "" {
 		safeFilter := strings.ReplaceAll(filter, `"""`, `\"\"\"`)
@@ -160,15 +186,34 @@ func buildScript(delim, format string, maxsplit int, extended bool, setup, forea
 		}
 	}
 
+	if strip {
+		sb.WriteString("    part = [f.strip() for f in part]\n")
+	}
+
+	if filterAfter != "" {
+		fmt.Fprintf(&sb, "    if not (%s):\n        continue\n", filterAfter)
+	}
+
 	// Format string as a Python f-string with triple-double-quote delimiters.
 	safeFormat := strings.ReplaceAll(format, `"""`, `\"\"\"`)
-	if run == "" {
-		fmt.Fprintf(&sb, "    try:\n        print(f\"\"\"%s\"\"\")\n    except IndexError:\n        pass\n", safeFormat)
-	} else {
+	limitBreak := ""
+	if limit > 0 {
+		limitBreak = fmt.Sprintf("\n        _emitted += 1\n        if _emitted >= %d:\n            break", limit)
+	}
+	if run != "" {
 		safeRun := strings.ReplaceAll(run, `"""`, `\"\"\"`)
 		fmt.Fprintf(&sb,
-			"    try:\n        output = f\"\"\"%s\"\"\"\n        os.system(f\"\"\"%s\"\"\")\n    except IndexError:\n        pass\n",
-			safeFormat, safeRun)
+			"    try:\n        output = f\"\"\"%s\"\"\"\n        os.system(f\"\"\"%s\"\"\")%s\n    except IndexError:\n        pass\n",
+			safeFormat, safeRun, limitBreak)
+	} else if join != "" {
+		fmt.Fprintf(&sb, "    try:\n        _results.append(f\"\"\"%s\"\"\")%s\n    except IndexError:\n        pass\n", safeFormat, limitBreak)
+	} else {
+		fmt.Fprintf(&sb, "    try:\n        print(f\"\"\"%s\"\"\")%s\n    except IndexError:\n        pass\n", safeFormat, limitBreak)
+	}
+
+	if join != "" && run == "" {
+		safeJoin := strings.ReplaceAll(join, `"""`, `\"\"\"`)
+		fmt.Fprintf(&sb, "print(\"\"\"%s\"\"\".join(_results))\n", safeJoin)
 	}
 
 	return sb.String()
