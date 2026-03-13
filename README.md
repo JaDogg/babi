@@ -29,4 +29,13 @@
 -  `-h, --help`            help for babi
 -  `-v, --version`         version for babi
 
-Use "babi [command] --help" for more information about a command.
+Use `"babi [command] --help"` for more information about a command.
+
+----------
+
+Copyright (C) 2026 Bhathiya Perera
+
+This work is free. You can redistribute it and/or modify it under the
+terms of the WTFPL, Version 2.
+See the LICENSE file for more details.
+
