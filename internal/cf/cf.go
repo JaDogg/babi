@@ -22,6 +22,8 @@ Reads from [file] or stdin. Requires Python (python3, python, or py).
   babi cf --maxsplit=1 ':' '[{part[0]}] {part[1]}' /etc/passwd
   babi cf -E '\s+' '{part[0]}/{part[1]}'
   babi cf --setup='total=0' --foreach='total+=float(part[0])' ',' '{total:.2f}'
+  babi cf --filter='^ERROR' ' ' '{part[1]}: {part[2]}' app.log
+  babi cf ' ' '{part[0]}' --run 'echo {output}'
 
 Variables available in format/setup/foreach:
   n       line index (0-based, from enumerate)
@@ -34,6 +36,9 @@ Variables available in format/setup/foreach:
 	c.Flags().BoolP("extended", "E", false, "use re.split (regex) instead of str.split")
 	c.Flags().StringP("setup", "s", "", "Python code to run once before the loop")
 	c.Flags().StringP("foreach", "f", "", "Python code to run inside the loop, before formatting")
+	c.Flags().StringP("filter", "F", "", "only process lines matching this regex (applied before split)")
+	c.Flags().Bool("color", false, "force ANSI color output even when stdout is not a TTY")
+	c.Flags().String("run", "", "shell command to execute per line; use {output} for the formatted result")
 	c.Flags().Bool("debug", false, "print the generated Python script to stderr instead of running it")
 	return c
 }
@@ -46,9 +51,12 @@ func run(cmd *cobra.Command, args []string) error {
 	extended, _ := cmd.Flags().GetBool("extended")
 	setup, _ := cmd.Flags().GetString("setup")
 	foreach, _ := cmd.Flags().GetString("foreach")
+	filter, _ := cmd.Flags().GetString("filter")
+	color, _ := cmd.Flags().GetBool("color")
+	run, _ := cmd.Flags().GetString("run")
 	debug, _ := cmd.Flags().GetBool("debug")
 
-	script := buildScript(delim, format, maxsplit, extended, setup, foreach)
+	script := buildScript(delim, format, maxsplit, extended, setup, foreach, filter, run)
 
 	if debug {
 		fmt.Fprintf(os.Stderr, "# generated Python script\n%s\n", script)
@@ -90,16 +98,24 @@ func run(cmd *cobra.Command, args []string) error {
 	c.Stdin = input
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr
+	if color {
+		// FORCE_COLOR is respected by many libraries; also set PYTHONCOLORIZE (Python 3.13+)
+		// and pass through existing env so Python can still find its stdlib.
+		c.Env = append(os.Environ(), "FORCE_COLOR=1", "PYTHONCOLORIZE=1")
+	}
 	return c.Run()
 }
 
 // buildScript generates the Python script that will be executed.
-func buildScript(delim, format string, maxsplit int, extended bool, setup, foreach string) string {
+func buildScript(delim, format string, maxsplit int, extended bool, setup, foreach, filter, run string) string {
 	var sb strings.Builder
 
 	sb.WriteString("import sys\n")
-	if extended {
+	if extended || filter != "" {
 		sb.WriteString("import re\n")
+	}
+	if run != "" {
+		sb.WriteString("import os\n")
 	}
 	sb.WriteString("\n")
 
@@ -113,6 +129,11 @@ func buildScript(delim, format string, maxsplit int, extended bool, setup, forea
 
 	sb.WriteString("for n, line in enumerate(sys.stdin):\n")
 	sb.WriteString("    line = line.rstrip('\\n')\n")
+
+	if filter != "" {
+		safeFilter := strings.ReplaceAll(filter, `"""`, `\"\"\"`)
+		fmt.Fprintf(&sb, "    if not re.search(\"\"\"%s\"\"\", line):\n        continue\n", safeFilter)
+	}
 
 	if foreach != "" {
 		for _, l := range strings.Split(foreach, "\n") {
@@ -141,7 +162,14 @@ func buildScript(delim, format string, maxsplit int, extended bool, setup, forea
 
 	// Format string as a Python f-string with triple-double-quote delimiters.
 	safeFormat := strings.ReplaceAll(format, `"""`, `\"\"\"`)
-	fmt.Fprintf(&sb, "    try:\n        print(f\"\"\"%s\"\"\")\n    except IndexError:\n        pass\n", safeFormat)
+	if run == "" {
+		fmt.Fprintf(&sb, "    try:\n        print(f\"\"\"%s\"\"\")\n    except IndexError:\n        pass\n", safeFormat)
+	} else {
+		safeRun := strings.ReplaceAll(run, `"""`, `\"\"\"`)
+		fmt.Fprintf(&sb,
+			"    try:\n        output = f\"\"\"%s\"\"\"\n        os.system(f\"\"\"%s\"\"\")\n    except IndexError:\n        pass\n",
+			safeFormat, safeRun)
+	}
 
 	return sb.String()
 }
