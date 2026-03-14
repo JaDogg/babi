@@ -43,7 +43,19 @@ Without -m the annotation is auto-generated from commits since the previous tag.
 	set.Flags().Bool("dry-run", false, "print the tag without creating or pushing")
 	set.Flags().StringP("message", "m", "", "custom annotation message")
 
-	root.AddCommand(set)
+	undo := &cobra.Command{
+		Use:   "undo",
+		Short: "Delete the last semver tag locally and from origin",
+		Long: `Find the latest semver tag, delete it locally, and push the deletion to origin.
+
+  babi tag undo           # delete the latest tag locally and on origin
+  babi tag undo --dry-run # preview without deleting anything`,
+		Args: cobra.NoArgs,
+		RunE: runUndo,
+	}
+	undo.Flags().Bool("dry-run", false, "print the tag that would be deleted without actually deleting")
+
+	root.AddCommand(set, undo)
 	return root
 }
 
@@ -182,6 +194,54 @@ func runSet(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("git push: %s\n%s", err, out)
 	}
 	fmt.Printf("  %s %s\n", cc.BoldGreen("✓ pushed"), cc.Bold(newTag))
+	fmt.Println()
+	return nil
+}
+
+// runUndo handles "babi tag undo".
+func runUndo(cmd *cobra.Command, _ []string) error {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	repoDir, err := gitRoot(cwd)
+	if err != nil {
+		return fmt.Errorf("not a git repository: %w", err)
+	}
+
+	last, err := latestTag(repoDir)
+	if err != nil {
+		return fmt.Errorf("reading tags: %w", err)
+	}
+	if last == "" {
+		return fmt.Errorf("no semver tags found")
+	}
+
+	dryRun, _ := cmd.Flags().GetBool("dry-run")
+
+	fmt.Println()
+	fmt.Printf("  %s  %s\n", cc.Dim("tag to undo:"), cc.BoldYellow(last))
+	fmt.Println()
+
+	if dryRun {
+		fmt.Printf("  %s git push origin :%s\n", cc.Dim("would run:"), last)
+		fmt.Printf("  %s git tag --delete %s\n", cc.Dim("would run:"), last)
+		fmt.Println(cc.BoldYellow("dry-run: nothing deleted"))
+		return nil
+	}
+
+	// Delete from remote first so we don't leave a dangling local tag on failure.
+	fmt.Printf("  %s %s\n", cc.Dim("deleting remote"), cc.Dim("origin :"+last))
+	if out, err := git(repoDir, "push", "origin", ":"+last); err != nil {
+		return fmt.Errorf("git push origin :%s: %s\n%s", last, err, out)
+	}
+	fmt.Printf("  %s %s\n", cc.BoldGreen("✓ remote deleted"), cc.Bold(last))
+
+	// Delete local tag.
+	if out, err := git(repoDir, "tag", "--delete", last); err != nil {
+		return fmt.Errorf("git tag --delete %s: %s\n%s", last, err, out)
+	}
+	fmt.Printf("  %s %s\n", cc.BoldGreen("✓ local deleted"), cc.Bold(last))
 	fmt.Println()
 	return nil
 }
