@@ -181,6 +181,45 @@ var deps = []depGroup{
 		},
 	},
 	{
+		name:   "ICON GENERATION",
+		anyOne: true,
+		entries: []depEntry{
+			{
+				bin:      "iconutil",
+				commands: "babi meta icns  (macOS preferred)",
+				note:     "pre-installed on macOS",
+				brew:     "pre-installed on macOS (Xcode Command Line Tools)",
+				apt:      "not available on Linux — ImageMagick used instead",
+				pacman:   "not available on Linux — ImageMagick used instead",
+				winget:   "not available on Windows — ImageMagick used instead",
+			},
+		},
+	},
+	{
+		name:   "FILE OPEN (desktop)",
+		anyOne: true,
+		entries: []depEntry{
+			{
+				bin:      "open",
+				commands: "babi fm  (macOS open file/dir)",
+				note:     "pre-installed on macOS",
+				brew:     "pre-installed on macOS",
+				apt:      "not available — use xdg-open",
+				pacman:   "not available — use xdg-open",
+				winget:   "not available — use rundll32 (built-in)",
+			},
+			{
+				bin:      "xdg-open",
+				commands: "babi fm  (Linux open file/dir)",
+				note:     "part of xdg-utils",
+				brew:     "not available on macOS — use open",
+				apt:      "apt install xdg-utils",
+				pacman:   "pacman -S xdg-utils",
+				winget:   "not available — use rundll32 (built-in)",
+			},
+		},
+	},
+	{
 		name:   "PYTHON",
 		anyOne: true,
 		entries: []depEntry{
