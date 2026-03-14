@@ -192,6 +192,16 @@ Legend: 🖥️ interactive TUI &nbsp;·&nbsp; ⚡ CLI tool
    babi tag undo              # delete last semver tag
    ```
 
+-  🖥️ `type`        Touch-typing tutor (fast / slow / normal method)
+   Based on code - https://github.com/pb-/gotypist
+   ```sh
+   babi type                      # random words from built-in dictionary
+   babi type hello world          # type a specific phrase
+   babi type -f wordlist.txt      # use a custom word list
+   babi type -c -f mycode.go      # code-line mode (sequential)
+   babi type -n 0.2               # mix in 20% random numbers
+   ```
+
 -  ⚡ `tree`        Display directory contents as a tree
    ```sh
    babi tree

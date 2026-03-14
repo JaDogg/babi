@@ -43,6 +43,7 @@ import (
 	"github.com/jadogg/babi/internal/tui/fm"
 	gitui "github.com/jadogg/babi/internal/tui/git"
 	tuihex "github.com/jadogg/babi/internal/tui/hex"
+	"github.com/jadogg/babi/internal/tui/typer"
 )
 
 var version = "dev" // set by -ldflags "-X main.version=vX.Y.Z" at build time
@@ -1860,7 +1861,7 @@ func main() {
 	pdfSplitCmd.Flags().String("pages", "", "split before these page numbers, comma-separated (e.g. 3,6,9)")
 	pdfCmd.AddCommand(pdfMergeCmd, pdfSplitCmd)
 
-	rootCmd.AddCommand(syncCmd, commitCmd, searchCmd, replaceCmd, editCmd, hexCmd, fmCmd, dtCmd, convertCmd, hashCmd, encodeCmd, genCmd, portCmd, ipCmd, logCmd, stashCmd, pdfCmd, meta.Command(), cf.Command(), tree.Command(), tag.Command(), check.Command(), serve.Command(), pack.PackCommand(), pack.UnpackCommand())
+	rootCmd.AddCommand(syncCmd, commitCmd, searchCmd, replaceCmd, editCmd, hexCmd, fmCmd, dtCmd, convertCmd, hashCmd, encodeCmd, genCmd, portCmd, ipCmd, logCmd, stashCmd, pdfCmd, meta.Command(), cf.Command(), tree.Command(), tag.Command(), check.Command(), serve.Command(), pack.PackCommand(), pack.UnpackCommand(), typer.Command())
 	initCobraColors()
 
 	if err := rootCmd.Execute(); err != nil {
