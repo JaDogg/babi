@@ -122,6 +122,11 @@ Legend: 🖥️ interactive TUI &nbsp;·&nbsp; ⚡ CLI tool
    babi meta icns icon.png        # macOS .icns from image
    ```
 
+-  ⚡ `new`        Scaffold a project
+   ```sh
+   babi new python --name banana --version 1.0.0   # Python + uv 
+   ```
+
 -  ⚡ `pack`        Create an archive from files/directories
    ```sh
    babi pack out.zip src/ readme.md
