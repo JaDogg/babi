@@ -12,6 +12,7 @@ import (
 	"hash"
 	"io"
 	"math/big"
+	"net"
 	"net/url"
 	"os"
 	"os/exec"
@@ -1663,6 +1664,94 @@ var pdfSplitCmd = &cobra.Command{
 	},
 }
 
+// ─── babi ip ─────────────────────────────────────────────────────────────────
+
+var ipAllFlag bool
+
+var ipCmd = &cobra.Command{
+	Use:   "ip",
+	Short: "Show local IP address for the internet-facing interface",
+	Long: `Show the local IP of the network interface used for internet access.
+Use --all to also list every non-loopback interface.`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		// UDP dial to a well-known external address determines routing without
+		// sending any actual packets.
+		conn, err := net.Dial("udp", "8.8.8.8:80")
+		if err == nil {
+			defer conn.Close()
+			primary := conn.LocalAddr().(*net.UDPAddr).IP.String()
+
+			// Find which interface owns this IP.
+			ifaceName := ""
+			if ifaces, e := net.Interfaces(); e == nil {
+				outer:
+				for _, iface := range ifaces {
+					addrs, _ := iface.Addrs()
+					for _, addr := range addrs {
+						var ip net.IP
+						switch v := addr.(type) {
+						case *net.IPNet:
+							ip = v.IP
+						case *net.IPAddr:
+							ip = v.IP
+						}
+						if ip != nil && ip.String() == primary {
+							ifaceName = iface.Name
+							break outer
+						}
+					}
+				}
+			}
+
+			label := "IP"
+			if ifaceName != "" {
+				label = fmt.Sprintf("IP (%s)", ifaceName)
+			}
+			fmt.Printf("%-24s %s\n", cc.Dim(label+":"), cc.BoldGreen(primary))
+		} else {
+			fmt.Printf("%s could not determine internet-facing interface\n", cc.BoldYellow("Warning:"))
+		}
+
+		if !ipAllFlag {
+			return nil
+		}
+
+		fmt.Println()
+		fmt.Println(cc.Bold("All interfaces:"))
+		ifaces, err := net.Interfaces()
+		if err != nil {
+			return err
+		}
+		for _, iface := range ifaces {
+			if iface.Flags&net.FlagLoopback != 0 {
+				continue
+			}
+			addrs, _ := iface.Addrs()
+			for _, addr := range addrs {
+				var ip net.IP
+				var mask net.IPMask
+				switch v := addr.(type) {
+				case *net.IPNet:
+					ip = v.IP
+					mask = v.Mask
+				case *net.IPAddr:
+					ip = v.IP
+				}
+				if ip == nil || ip.IsLoopback() {
+					continue
+				}
+				ipStr := ip.String()
+				if mask != nil {
+					ones, _ := mask.Size()
+					ipStr = fmt.Sprintf("%s/%d", ipStr, ones)
+				}
+				fmt.Printf("  %-14s %s\n", cc.Dim(iface.Name), cc.Cyan(ipStr))
+			}
+		}
+		return nil
+	},
+}
+
 // ─── colored cobra help ───────────────────────────────────────────────────────
 
 func initCobraColors() {
@@ -1763,12 +1852,15 @@ func main() {
 	portCmd.Flags().BoolVar(&portKill, "kill", false, "kill the process on the port")
 	portCmd.AddCommand(portListCmd)
 
+	// ip
+	ipCmd.Flags().BoolVarP(&ipAllFlag, "all", "a", false, "list all non-loopback interfaces")
+
 	pdfMergeCmd.Flags().Bool("divider", false, "insert a blank page between each merged PDF")
 	pdfSplitCmd.Flags().Int("span", 0, "pages per output file (default 1)")
 	pdfSplitCmd.Flags().String("pages", "", "split before these page numbers, comma-separated (e.g. 3,6,9)")
 	pdfCmd.AddCommand(pdfMergeCmd, pdfSplitCmd)
 
-	rootCmd.AddCommand(syncCmd, commitCmd, searchCmd, replaceCmd, editCmd, hexCmd, fmCmd, dtCmd, convertCmd, hashCmd, encodeCmd, genCmd, portCmd, logCmd, stashCmd, pdfCmd, meta.Command(), cf.Command(), tree.Command(), tag.Command(), check.Command(), serve.Command(), pack.PackCommand(), pack.UnpackCommand())
+	rootCmd.AddCommand(syncCmd, commitCmd, searchCmd, replaceCmd, editCmd, hexCmd, fmCmd, dtCmd, convertCmd, hashCmd, encodeCmd, genCmd, portCmd, ipCmd, logCmd, stashCmd, pdfCmd, meta.Command(), cf.Command(), tree.Command(), tag.Command(), check.Command(), serve.Command(), pack.PackCommand(), pack.UnpackCommand())
 	initCobraColors()
 
 	if err := rootCmd.Execute(); err != nil {
