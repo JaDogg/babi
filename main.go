@@ -32,6 +32,7 @@ import (
 	"github.com/jadogg/babi/internal/dt"
 	"github.com/jadogg/babi/internal/ed"
 	"github.com/jadogg/babi/internal/meta"
+	"github.com/jadogg/babi/internal/pack"
 	"github.com/jadogg/babi/internal/serve"
 	"github.com/jadogg/babi/internal/tag"
 	"github.com/jadogg/babi/internal/tree"
@@ -1767,7 +1768,7 @@ func main() {
 	pdfSplitCmd.Flags().String("pages", "", "split before these page numbers, comma-separated (e.g. 3,6,9)")
 	pdfCmd.AddCommand(pdfMergeCmd, pdfSplitCmd)
 
-	rootCmd.AddCommand(syncCmd, commitCmd, searchCmd, replaceCmd, editCmd, hexCmd, fmCmd, dtCmd, convertCmd, hashCmd, encodeCmd, genCmd, portCmd, logCmd, stashCmd, pdfCmd, meta.Command(), cf.Command(), tree.Command(), tag.Command(), check.Command(), serve.Command())
+	rootCmd.AddCommand(syncCmd, commitCmd, searchCmd, replaceCmd, editCmd, hexCmd, fmCmd, dtCmd, convertCmd, hashCmd, encodeCmd, genCmd, portCmd, logCmd, stashCmd, pdfCmd, meta.Command(), cf.Command(), tree.Command(), tag.Command(), check.Command(), serve.Command(), pack.PackCommand(), pack.UnpackCommand())
 	initCobraColors()
 
 	if err := rootCmd.Execute(); err != nil {
