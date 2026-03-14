@@ -25,19 +25,20 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 
+	"github.com/jadogg/babi/internal/cf"
+	"github.com/jadogg/babi/internal/check"
 	cc "github.com/jadogg/babi/internal/clicolor"
 	"github.com/jadogg/babi/internal/config"
 	cv "github.com/jadogg/babi/internal/convert"
-	"github.com/jadogg/babi/internal/cf"
-	"github.com/jadogg/babi/internal/check"
 	"github.com/jadogg/babi/internal/dt"
 	"github.com/jadogg/babi/internal/ed"
 	"github.com/jadogg/babi/internal/meta"
+	"github.com/jadogg/babi/internal/newproject"
 	"github.com/jadogg/babi/internal/pack"
 	"github.com/jadogg/babi/internal/serve"
+	syncer "github.com/jadogg/babi/internal/sync"
 	"github.com/jadogg/babi/internal/tag"
 	"github.com/jadogg/babi/internal/tree"
-	syncer "github.com/jadogg/babi/internal/sync"
 	"github.com/jadogg/babi/internal/tui"
 	"github.com/jadogg/babi/internal/tui/editor"
 	"github.com/jadogg/babi/internal/tui/fm"
@@ -1685,7 +1686,7 @@ Use --all to also list every non-loopback interface.`,
 			// Find which interface owns this IP.
 			ifaceName := ""
 			if ifaces, e := net.Interfaces(); e == nil {
-				outer:
+			outer:
 				for _, iface := range ifaces {
 					addrs, _ := iface.Addrs()
 					for _, addr := range addrs {
@@ -1861,7 +1862,7 @@ func main() {
 	pdfSplitCmd.Flags().String("pages", "", "split before these page numbers, comma-separated (e.g. 3,6,9)")
 	pdfCmd.AddCommand(pdfMergeCmd, pdfSplitCmd)
 
-	rootCmd.AddCommand(syncCmd, commitCmd, searchCmd, replaceCmd, editCmd, hexCmd, fmCmd, dtCmd, convertCmd, hashCmd, encodeCmd, genCmd, portCmd, ipCmd, logCmd, stashCmd, pdfCmd, meta.Command(), cf.Command(), tree.Command(), tag.Command(), check.Command(), serve.Command(), pack.PackCommand(), pack.UnpackCommand(), typer.Command())
+	rootCmd.AddCommand(syncCmd, commitCmd, searchCmd, replaceCmd, editCmd, hexCmd, fmCmd, dtCmd, convertCmd, hashCmd, encodeCmd, genCmd, portCmd, ipCmd, logCmd, stashCmd, pdfCmd, meta.Command(), cf.Command(), tree.Command(), tag.Command(), check.Command(), serve.Command(), pack.PackCommand(), pack.UnpackCommand(), typer.Command(), newproject.Command())
 	initCobraColors()
 
 	if err := rootCmd.Execute(); err != nil {
