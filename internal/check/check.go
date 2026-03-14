@@ -17,6 +17,7 @@ type depEntry struct {
 	brew     string // macOS install hint
 	apt      string // Debian/Ubuntu install hint
 	pacman   string // Arch install hint
+	winget   string // Windows install hint
 	note     string // shown when available instead of install hint
 	required bool   // required vs optional
 }
@@ -36,6 +37,7 @@ var deps = []depGroup{
 				bin:      "git",
 				commands: "babi commit, log, stash",
 				note:     "install via your OS package manager",
+				winget:   "winget install Git.Git",
 				required: true,
 			},
 		},
@@ -49,6 +51,7 @@ var deps = []depGroup{
 				brew:     "brew install ripgrep",
 				apt:      "apt install ripgrep",
 				pacman:   "pacman -S ripgrep",
+				winget:   "winget install BurntSushi.ripgrep.MSVC",
 			},
 		},
 	},
@@ -61,6 +64,7 @@ var deps = []depGroup{
 				brew:     "brew install ffmpeg",
 				apt:      "apt install ffmpeg",
 				pacman:   "pacman -S ffmpeg",
+				winget:   "winget install Gyan.FFmpeg",
 			},
 			{
 				bin:      "magick",
@@ -68,6 +72,7 @@ var deps = []depGroup{
 				brew:     "brew install imagemagick",
 				apt:      "apt install imagemagick",
 				pacman:   "pacman -S imagemagick",
+				winget:   "winget install ImageMagick.ImageMagick",
 				note:     "ImageMagick v7+",
 			},
 		},
@@ -81,6 +86,7 @@ var deps = []depGroup{
 				brew:     "brew install pandoc",
 				apt:      "apt install pandoc",
 				pacman:   "pacman -S pandoc",
+				winget:   "winget install JohnMacFarlane.Pandoc",
 			},
 		},
 	},
@@ -95,6 +101,7 @@ var deps = []depGroup{
 				brew:     "brew install ntp",
 				apt:      "apt install ntp",
 				pacman:   "pacman -S ntp",
+				winget:   "use w32tm /resync (built-in)",
 			},
 			{
 				bin:      "ntpdate",
@@ -102,6 +109,7 @@ var deps = []depGroup{
 				brew:     "brew install ntp",
 				apt:      "apt install ntpdate",
 				pacman:   "pacman -S ntp",
+				winget:   "use w32tm /resync (built-in)",
 			},
 		},
 	},
@@ -116,6 +124,7 @@ var deps = []depGroup{
 				brew:     "brew install lsof",
 				apt:      "apt install lsof",
 				pacman:   "pacman -S lsof",
+				winget:   "use netstat -ano (built-in)",
 			},
 			{
 				bin:      "ss",
@@ -123,6 +132,51 @@ var deps = []depGroup{
 				note:     "part of iproute2",
 				apt:      "apt install iproute2",
 				pacman:   "pacman -S iproute2",
+				winget:   "not available on Windows",
+			},
+		},
+	},
+	{
+		name: "ARCHIVING",
+		entries: []depEntry{
+			{
+				bin:      "tar",
+				commands: "babi pack/unpack  (.tar.bz2 pack, .tar.xz, .tar.lzma, .tar.zst)",
+				note:     "usually pre-installed  (Windows: .lzma/.zst fall back to 7z)",
+				brew:     "brew install gnu-tar",
+				apt:      "apt install tar",
+				pacman:   "pacman -S tar",
+				winget:   "built-in (Windows 10+)",
+			},
+		},
+	},
+	{
+		name:   "7-ZIP",
+		anyOne: true,
+		entries: []depEntry{
+			{
+				bin:      "7z",
+				commands: "babi pack/unpack  (.7z; Windows: also .tar.lzma/.tar.zst)",
+				brew:     "brew install p7zip",
+				apt:      "apt install p7zip-full",
+				pacman:   "pacman -S p7zip",
+				winget:   "winget install 7zip.7zip",
+			},
+			{
+				bin:      "7za",
+				commands: "babi pack/unpack  (.7z archives, fallback)",
+				brew:     "brew install p7zip",
+				apt:      "apt install p7zip",
+				pacman:   "pacman -S p7zip",
+				winget:   "winget install 7zip.7zip",
+			},
+			{
+				bin:      "7zz",
+				commands: "babi pack/unpack  (.7z archives, fallback)",
+				brew:     "brew install sevenzip",
+				apt:      "apt install 7zip",
+				pacman:   "pacman -S 7zip",
+				winget:   "winget install 7zip.7zip",
 			},
 		},
 	},
@@ -136,6 +190,7 @@ var deps = []depGroup{
 				brew:     "brew install python",
 				apt:      "apt install python3",
 				pacman:   "pacman -S python",
+				winget:   "winget install Python.Python.3",
 			},
 			{
 				bin:      "python",
@@ -143,11 +198,13 @@ var deps = []depGroup{
 				brew:     "brew install python",
 				apt:      "apt install python3",
 				pacman:   "pacman -S python",
+				winget:   "winget install Python.Python.3",
 			},
 			{
 				bin:      "py",
 				commands: "babi cf  (Windows launcher fallback)",
 				note:     "Windows Python Launcher",
+				winget:   "winget install Python.Python.3",
 			},
 		},
 	},
@@ -162,6 +219,10 @@ func installHint(e depEntry) string {
 	case "linux":
 		if e.apt != "" {
 			return e.apt
+		}
+	case "windows":
+		if e.winget != "" {
+			return e.winget
 		}
 	}
 	if e.brew != "" {
