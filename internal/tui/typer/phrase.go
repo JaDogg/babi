@@ -54,6 +54,15 @@ func SequentialLine(lines []string) PhraseFunc {
 	}
 }
 
+// RandomLine picks a random line from lines on each call.
+func RandomLine(lines []string) PhraseFunc {
+	return func(seed int64) (int64, string) {
+		r := rand.New(rand.NewSource(seed))
+		line := lines[r.Int63n(int64(len(lines)))]
+		return r.Int63(), line
+	}
+}
+
 func filterWords(words []string, pattern string, maxLength int) []string {
 	filtered := make([]string, 0)
 	compiled := regexp.MustCompile(pattern)

@@ -150,8 +150,10 @@ func New(staticPhrase string, file string, codeMode bool, numProb float64) (Mode
 			return Model{}, fmt.Errorf("reading word file: %w", err)
 		}
 		gen = buildGenerator(data, codeMode, numProb)
+	case codeMode:
+		gen = buildGenerator(nil, true, numProb)
 	default:
-		gen = buildGenerator(dictData, codeMode, numProb)
+		gen = buildGenerator(dictData, false, numProb)
 	}
 
 	statsFile := DefaultStatsFile()
@@ -170,6 +172,10 @@ func New(staticPhrase string, file string, codeMode bool, numProb float64) (Mode
 
 func buildGenerator(data []byte, codeMode bool, numProb float64) PhraseFunc {
 	if codeMode {
+		// nil data means no file was provided — use the built-in multi-language pool
+		if data == nil {
+			return RandomLine(allCodeLines)
+		}
 		words := filterWords(readLines(data), `^[^/][^/]`, 80)
 		if len(words) == 0 {
 			return DefaultPhrase
@@ -385,9 +391,10 @@ func (m Model) View() string {
 
 	now := time.Now()
 
-	lines := []string{
-		m.renderHeader(),
-		"",
+	header := m.renderHeader()
+	footer := m.renderFooter()
+
+	body := strings.Join([]string{
 		m.renderModeInfo(),
 		"",
 		m.renderPhrase(now),
@@ -398,19 +405,24 @@ func (m Model) View() string {
 		m.renderProgress(),
 		"",
 		m.renderAttribution(),
-		"",
-		m.renderFooter(),
+	}, "\n")
+
+	bodyH := strings.Count(body, "\n") + 1
+	// available rows between header and footer
+	available := m.height - 2
+	if available < bodyH {
+		available = bodyH
 	}
+	topPad := (available - bodyH) / 2
+	botPad := available - bodyH - topPad
 
-	content := strings.Join(lines, "\n")
-
-	// Ensure we fill height
-	contentLines := strings.Count(content, "\n") + 1
-	if contentLines < m.height {
-		content += strings.Repeat("\n", m.height-contentLines)
-	}
-
-	return content
+	var sb strings.Builder
+	sb.WriteString(header)
+	sb.WriteString(strings.Repeat("\n", topPad+1))
+	sb.WriteString(body)
+	sb.WriteString(strings.Repeat("\n", botPad+1))
+	sb.WriteString(footer)
+	return sb.String()
 }
 
 func (m Model) renderHeader() string {
