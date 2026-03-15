@@ -513,23 +513,52 @@ var dtCmd = &cobra.Command{
 }
 
 var dtInCmd = &cobra.Command{
-	Use:                "in <duration>",
-	Short:              "Time after/before a duration from now (e.g. 1h, -2d, 1mo, 1y2mo3d)",
-	Example:            "  babi dt in 1h\n  babi dt in -2d\n  babi dt in 1y2mo3d",
+	Use:                "in <duration> [--from <date>]",
+	Short:              "Time after/before a duration from now (or a given date)",
+	Example:            "  babi dt in 1h\n  babi dt in -2d\n  babi dt in 1y2mo3d\n  babi dt in 5w2d --from 03/02/2026",
 	DisableFlagParsing: true, // prevents cobra treating -2d as a flag
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) == 1 && (args[0] == "-h" || args[0] == "--help") {
 			return cmd.Help()
 		}
-		if len(args) != 1 {
-			return fmt.Errorf("expected exactly 1 argument (e.g. 1h, -2d, 1mo)")
+
+		// Manually parse --from <date> since DisableFlagParsing is on.
+		var durArg string
+		var fromStr string
+		for i := 0; i < len(args); i++ {
+			switch args[i] {
+			case "--from", "-from":
+				if i+1 >= len(args) {
+					return fmt.Errorf("--from requires a date argument")
+				}
+				fromStr = args[i+1]
+				i++
+			default:
+				if durArg != "" {
+					return fmt.Errorf("unexpected argument %q", args[i])
+				}
+				durArg = args[i]
+			}
 		}
-		d, err := dt.ParseCalDuration(args[0])
+		if durArg == "" {
+			return fmt.Errorf("expected a duration argument (e.g. 1h, -2d, 1mo)")
+		}
+
+		d, err := dt.ParseCalDuration(durArg)
 		if err != nil {
 			return err
 		}
-		now := time.Now()
-		result := d.AddTo(now)
+
+		base := time.Now()
+		fromLabel := "Now:   "
+		if fromStr != "" {
+			base, err = dt.ParseDate(fromStr)
+			if err != nil {
+				return fmt.Errorf("--from: %w", err)
+			}
+			fromLabel = "From:  "
+		}
+		result := d.AddTo(base)
 
 		var label, resultStr string
 		if d.Neg {
@@ -540,7 +569,7 @@ var dtInCmd = &cobra.Command{
 			resultStr = cc.BoldGreen(result.Format(dtFmt))
 		}
 
-		fmt.Printf("%s %s\n", cc.Dim("Now:   "), cc.BrightWhite(now.Format(dtFmt)))
+		fmt.Printf("%s %s\n", cc.Dim(fromLabel), cc.BrightWhite(base.Format(dtFmt)))
 		fmt.Printf("%-30s %s\n", label, resultStr)
 		fmt.Printf("%s %s\n", cc.Dim("UTC:   "), cc.Dim(result.UTC().Format(dtFmtUTC)))
 		fmt.Printf("%s %s\n", cc.Dim("Unix:  "), cc.Yellow(strconv.FormatInt(result.Unix(), 10)))

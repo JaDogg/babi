@@ -39,13 +39,14 @@ Legend: 🖥️ interactive TUI &nbsp;·&nbsp; ⚡ CLI tool
 
 -  ⚡ `dt`          Date and time utilities
    ```sh
-   babi dt                        # current time + common offsets
-   babi dt in 1h                  # time 1 hour from now
-   babi dt in -2d                 # time 2 days ago
-   babi dt age 1990-06-15         # age from birthdate
-   babi dt tz America/New_York    # current time in timezone
-   babi dt ntp                    # query NTP servers
-   babi dt ntp --sync             # sync system clock
+   babi dt                                   # current time + common offsets
+   babi dt in 1h                             # time 1 hour from now
+   babi dt in -2d                            # time 2 days ago
+   babi dt in 5w2d --from 03/02/2026         # offset from a specific date (DD/MM/YYYY)
+   babi dt age 1990-06-15                    # age from birthdate
+   babi dt tz America/New_York               # current time in timezone
+   babi dt ntp                               # query NTP servers
+   babi dt ntp --sync                        # sync system clock
    ```
 
 -  🖥️ `edit`        Open the text editor
