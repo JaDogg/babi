@@ -8,7 +8,6 @@ import (
 	"github.com/jadogg/babi/internal/cf"
 	"github.com/jadogg/babi/internal/check"
 	cc "github.com/jadogg/babi/internal/clicolor"
-	"github.com/jadogg/babi/internal/config"
 	"github.com/jadogg/babi/internal/convert"
 	"github.com/jadogg/babi/internal/dt"
 	"github.com/jadogg/babi/internal/ed"
@@ -34,8 +33,6 @@ import (
 )
 
 var version = "dev" // set by -ldflags "-X main.version=vX.Y.Z" at build time
-
-var configPath string
 
 var rootCmd = &cobra.Command{
 	Use:     "babi",
@@ -77,11 +74,8 @@ func initCobraColors() {
 }
 
 func main() {
-	defPath, _ := config.DefaultPath()
-	rootCmd.PersistentFlags().StringVar(&configPath, "config", defPath, "path to config.json")
-
 	rootCmd.AddCommand(
-		synccmd.Command(&configPath, func(p string) tea.Model { return tui.NewAppModel(p) }),
+		synccmd.Command(func() tea.Model { return tui.NewAppModel() }),
 		gitui.CommitCommand(),
 		ed.SearchCommand(),
 		ed.ReplaceCommand(),

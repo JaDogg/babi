@@ -13,16 +13,14 @@ import (
 )
 
 // Command returns the "babi sync" cobra command tree.
-// configPath must be the same *string registered as a persistent flag on root
-// so that its value is populated before any RunE executes.
 // newAppModel is the tui.NewAppModel factory — passed in to avoid an import cycle
 // (internal/tui imports internal/sync, so internal/sync cannot import internal/tui).
-func Command(configPath *string, newAppModel func(string) tea.Model) *cobra.Command {
+func Command(newAppModel func() tea.Model) *cobra.Command {
 	syncCmd := &cobra.Command{
 		Use:   "sync",
 		Short: "Open the file-sync TUI",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			p := tea.NewProgram(newAppModel(*configPath), tea.WithAltScreen())
+			p := tea.NewProgram(newAppModel(), tea.WithAltScreen())
 			_, err := p.Run()
 			return err
 		},
@@ -32,7 +30,7 @@ func Command(configPath *string, newAppModel func(string) tea.Model) *cobra.Comm
 		Use:   "run",
 		Short: "Sync all enabled entries (no TUI)",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.Load(*configPath)
+			cfg, err := config.Load(config.Path())
 			if err != nil {
 				return fmt.Errorf("load config: %w", err)
 			}
@@ -103,7 +101,7 @@ func Command(configPath *string, newAppModel func(string) tea.Model) *cobra.Comm
 			if _, err := os.Stat(source); err != nil {
 				return fmt.Errorf("source %q: %w", source, err)
 			}
-			cfg, err := config.Load(*configPath)
+			cfg, err := config.Load(config.Path())
 			if err != nil {
 				cfg = &config.Config{Version: 1}
 			}
@@ -118,7 +116,7 @@ func Command(configPath *string, newAppModel func(string) tea.Model) *cobra.Comm
 				Targets: targets,
 				Enabled: true,
 			})
-			if err := config.Save(*configPath, cfg); err != nil {
+			if err := config.Save(config.Path(), cfg); err != nil {
 				return fmt.Errorf("save config: %w", err)
 			}
 			fmt.Printf("%s %s %s: %s %s %s\n",
@@ -133,7 +131,7 @@ func Command(configPath *string, newAppModel func(string) tea.Model) *cobra.Comm
 		Use:   "list",
 		Short: "List all sync entries",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.Load(*configPath)
+			cfg, err := config.Load(config.Path())
 			if err != nil {
 				return fmt.Errorf("load config: %w", err)
 			}
@@ -168,7 +166,7 @@ func Command(configPath *string, newAppModel func(string) tea.Model) *cobra.Comm
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := args[0]
-			cfg, err := config.Load(*configPath)
+			cfg, err := config.Load(config.Path())
 			if err != nil {
 				return fmt.Errorf("load config: %w", err)
 			}
@@ -183,7 +181,7 @@ func Command(configPath *string, newAppModel func(string) tea.Model) *cobra.Comm
 				return fmt.Errorf("no entry named %q", name)
 			}
 			cfg.Entries = append(cfg.Entries[:idx], cfg.Entries[idx+1:]...)
-			if err := config.Save(*configPath, cfg); err != nil {
+			if err := config.Save(config.Path(), cfg); err != nil {
 				return fmt.Errorf("save config: %w", err)
 			}
 			fmt.Printf("%s %s %s\n",

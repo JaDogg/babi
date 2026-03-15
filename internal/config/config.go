@@ -7,13 +7,14 @@ import (
 	"path/filepath"
 )
 
-// DefaultPath returns ~/.babi/sync_config.json.
-func DefaultPath() (string, error) {
+// Path returns ~/.babi/sync_config.json. Panics if the home directory cannot
+// be determined (unrecoverable environment misconfiguration).
+func Path() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return "", err
+		panic("babi: cannot determine home directory: " + err.Error())
 	}
-	return filepath.Join(home, ".babi", "sync_config.json"), nil
+	return filepath.Join(home, ".babi", "sync_config.json")
 }
 
 // Load reads config from path, creating a default if it doesn't exist.

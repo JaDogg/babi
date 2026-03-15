@@ -15,11 +15,10 @@ const (
 
 // AppModel is the root bubbletea model.
 type AppModel struct {
-	screen     screen
-	cfg        *config.Config
-	configPath string
-	width      int
-	height     int
+	screen screen
+	cfg    *config.Config
+	width  int
+	height int
 
 	list listModel
 	add  addModel
@@ -27,16 +26,15 @@ type AppModel struct {
 }
 
 // NewAppModel creates the root model.
-func NewAppModel(configPath string) AppModel {
+func NewAppModel() AppModel {
 	return AppModel{
-		screen:     screenList,
-		configPath: configPath,
+		screen: screenList,
 	}
 }
 
 func (m AppModel) Init() tea.Cmd {
 	return func() tea.Msg {
-		cfg, err := config.Load(m.configPath)
+		cfg, err := config.Load(config.Path())
 		if err != nil {
 			cfg = &config.Config{Version: 1}
 		}
@@ -94,7 +92,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else if msg.index < len(m.cfg.Entries) {
 			m.cfg.Entries[msg.index] = msg.entry
 		}
-		_ = config.Save(m.configPath, m.cfg)
+		_ = config.Save(config.Path(), m.cfg)
 		m.screen = screenList
 		m.list = newListModel(m.cfg.Entries, m.width, m.height)
 		return m, nil
@@ -103,7 +101,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.index >= 0 && msg.index < len(m.cfg.Entries) {
 			m.cfg.Entries = append(m.cfg.Entries[:msg.index], m.cfg.Entries[msg.index+1:]...)
 		}
-		_ = config.Save(m.configPath, m.cfg)
+		_ = config.Save(config.Path(), m.cfg)
 		if m.list.cursor >= len(m.cfg.Entries) && m.list.cursor > 0 {
 			m.list.cursor--
 		}
