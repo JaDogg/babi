@@ -5,6 +5,8 @@ import (
 
 	"github.com/spf13/cobra"
 
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/jadogg/babi/internal/cat"
 	"github.com/jadogg/babi/internal/cf"
 	"github.com/jadogg/babi/internal/check"
 	cc "github.com/jadogg/babi/internal/clicolor"
@@ -12,14 +14,16 @@ import (
 	"github.com/jadogg/babi/internal/dt"
 	"github.com/jadogg/babi/internal/ed"
 	"github.com/jadogg/babi/internal/encode"
+	fscmd "github.com/jadogg/babi/internal/fscmd"
 	"github.com/jadogg/babi/internal/gen"
 	"github.com/jadogg/babi/internal/hash"
 	"github.com/jadogg/babi/internal/ip"
-	tea "github.com/charmbracelet/bubbletea"
+	"github.com/jadogg/babi/internal/ls"
 	"github.com/jadogg/babi/internal/meta"
 	"github.com/jadogg/babi/internal/newproject"
 	"github.com/jadogg/babi/internal/pack"
 	"github.com/jadogg/babi/internal/port"
+	"github.com/jadogg/babi/internal/sep"
 	"github.com/jadogg/babi/internal/serve"
 	synccmd "github.com/jadogg/babi/internal/sync"
 	"github.com/jadogg/babi/internal/tag"
@@ -30,6 +34,8 @@ import (
 	gitui "github.com/jadogg/babi/internal/tui/git"
 	tuihex "github.com/jadogg/babi/internal/tui/hex"
 	"github.com/jadogg/babi/internal/tui/typer"
+	"github.com/jadogg/babi/internal/wc"
+	"github.com/jadogg/babi/internal/which"
 )
 
 var version = "dev" // set by -ldflags "-X main.version=vX.Y.Z" at build time
@@ -102,6 +108,13 @@ func main() {
 		pack.UnpackCommand(),
 		typer.Command(),
 		newproject.Command(),
+		sep.Command(),
+		cat.Command(),
+		wc.Command(),
+		ls.Command(),
+		fscmd.Command(),
+		which.Command(),
+		gitui.GitCommand(),
 	)
 	initCobraColors()
 

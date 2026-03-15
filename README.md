@@ -5,6 +5,14 @@ Legend: 🖥️ interactive TUI &nbsp;·&nbsp; ⚡ CLI tool
 
 ## Available Commands:
 
+-  ⚡ `cat`         Print file contents, optionally a line range
+   ```sh
+   babi cat main.go            # whole file
+   babi cat main.go 64 240     # lines 64–240
+   babi cat main.go 2          # single line 2
+   babi cat main.go --tail 50  # last 50 lines
+   ```
+
 -  ⚡ `cf`          Cut and format text fields from each line
    ```sh
    echo "alice 30" | babi cf ' ' '{part[0]} is {part[1]} years old'
@@ -72,6 +80,16 @@ Legend: 🖥️ interactive TUI &nbsp;·&nbsp; ⚡ CLI tool
    babi fm ~/Documents
    ```
 
+-  ⚡ `fs`          File system operations (mkdir, rm, cp)
+   ```sh
+   babi fs mkdir internal/mytool
+   babi fs mkdir -p internal/a/b/c   # create parents as needed
+   babi fs rm file.go
+   babi fs rm -r mydir/              # remove directory recursively
+   babi fs cp babi ~/.local/bin/babi
+   babi fs cp -r src/ dst/
+   ```
+
 -  ⚡ `gen`         Generate UUIDs, passwords, and random strings
    ```sh
    babi gen uuid                  # random UUID v4
@@ -80,6 +98,20 @@ Legend: 🖥️ interactive TUI &nbsp;·&nbsp; ⚡ CLI tool
    babi gen pass -l 32 -s         # 32-char with symbols
    babi gen str                   # 16-char alphanumeric string
    babi gen str -l 32 -c hex      # 32-char hex string
+   ```
+
+-  ⚡ `git`         Headless git operations (status, log, config, revert)
+   ```sh
+   babi git status
+   babi git status ~/Projects/myrepo
+   babi git log
+   babi git log -n 10
+   babi git config                      # all config (local + global)
+   babi git config --local              # local config only
+   babi git config --global             # global config only
+   babi git config user.email           # specific key
+   babi git revert                      # revert HEAD
+   babi git revert -n 3                 # revert last 3 commits
    ```
 
 -  ⚡ `hash`        Hash files or strings
@@ -110,6 +142,16 @@ Legend: 🖥️ interactive TUI &nbsp;·&nbsp; ⚡ CLI tool
 -  🖥️ `log`         Interactive git log viewer
    ```sh
    babi log
+   ```
+
+-  ⚡ `ls`          List directory contents
+   ```sh
+   babi ls                   # current directory
+   babi ls internal/
+   babi ls -l                # long format: perms  size  mtime  name
+   babi ls -a                # include hidden (dot) files
+   babi ls -r                # recursive, all files
+   babi ls -la internal/
    ```
 
 -  ⚡ `meta`        Generate platform metadata files (plist, rc, manifest, ini, desktop, ico, icns)
@@ -167,6 +209,13 @@ Legend: 🖥️ interactive TUI &nbsp;·&nbsp; ⚡ CLI tool
    babi search "error" app.log -C 2
    ```
 
+-  ⚡ `sep`         Print a separator line
+   ```sh
+   babi sep          # ────────────────────── (terminal width)
+   babi sep =        # ══════════════════════
+   babi sep - 20     # --------------------
+   ```
+
 -  ⚡ `serve`       HTTP server utilities
    ```sh
    babi serve web              # static file server (current dir)
@@ -219,6 +268,21 @@ Legend: 🖥️ interactive TUI &nbsp;·&nbsp; ⚡ CLI tool
    babi unpack archive.zip
    babi unpack archive.tar.gz ./output/
    babi unpack release.7z ./dist/
+   ```
+
+-  ⚡ `wc`          Count lines, words, and characters in files
+   ```sh
+   babi wc main.go           # lines  words  chars  filename
+   babi wc -l main.go        # lines only
+   babi wc -w main.go        # words only
+   babi wc -c main.go        # chars only
+   babi wc file1 file2       # multiple files + total
+   ```
+
+-  ⚡ `which`       Locate a command on PATH
+   ```sh
+   babi which babi
+   babi which git rg python3
    ```
 
 ## Flags:

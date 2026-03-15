@@ -3,6 +3,9 @@ package git
 import (
 	"fmt"
 	"os"
+	"os/exec"
+	"strconv"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
@@ -103,6 +106,180 @@ func CommitCommand() *cobra.Command {
 	}
 	commitCmd.AddCommand(commitRunCmd)
 	return commitCmd
+}
+
+// GitCommand returns the "babi git" headless command group.
+func GitCommand() *cobra.Command {
+	g := &cobra.Command{
+		Use:   "git",
+		Short: "Headless git operations (status, log, config, revert)",
+		Long:  "Headless git subcommands. See also: babi commit (TUI), babi log (TUI), babi stash (TUI).",
+	}
+	g.AddCommand(gitStatusCmd(), gitLogCmd(), gitConfigCmd(), gitRevertCmd())
+	return g
+}
+
+func gitStatusCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "status [dir]",
+		Short: "Show working tree status",
+		Long: `Show the working tree status of a git repository.
+
+  babi git status
+  babi git status ~/Projects/myrepo`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			dir := "."
+			if len(args) == 1 {
+				dir = args[0]
+			}
+			repoDir, err := FindRoot(dir)
+			if err != nil {
+				return fmt.Errorf("not a git repository: %w", err)
+			}
+			files, err := GetStatus(repoDir)
+			if err != nil {
+				return err
+			}
+			if len(files) == 0 {
+				fmt.Println("nothing to commit, working tree clean")
+				return nil
+			}
+			for _, f := range files {
+				fmt.Printf("%s  %s\n", f.Label(), f.Path)
+			}
+			return nil
+		},
+	}
+}
+
+func gitLogCmd() *cobra.Command {
+	var n int
+	c := &cobra.Command{
+		Use:   "log [dir]",
+		Short: "Print commit log (headless)",
+		Long: `Print recent commits as one line each.
+
+  babi git log
+  babi git log -n 10
+  babi git log -n 5 ~/Projects/myrepo`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			dir := "."
+			if len(args) == 1 {
+				dir = args[0]
+			}
+			repoDir, err := FindRoot(dir)
+			if err != nil {
+				return fmt.Errorf("not a git repository: %w", err)
+			}
+			commits, err := GetLog(repoDir, n)
+			if err != nil {
+				return err
+			}
+			for _, c := range commits {
+				fmt.Printf("%s  %s  %s\n", c.Short, c.RelTime, c.Subject)
+			}
+			return nil
+		},
+	}
+	c.Flags().IntVarP(&n, "number", "n", 20, "number of commits to show")
+	return c
+}
+
+func gitConfigCmd() *cobra.Command {
+	var local, global bool
+	c := &cobra.Command{
+		Use:   "config [key] [dir]",
+		Short: "Show git config",
+		Long: `Show git configuration values.
+
+  babi git config                      # all config (local + global)
+  babi git config --local              # local config only
+  babi git config --global             # global config only
+  babi git config user.email           # specific key
+  babi git config user.email ~/myrepo  # specific key in a repo`,
+		Args: cobra.MaximumNArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			key := ""
+			dir := "."
+			for _, a := range args {
+				// If arg looks like a path (contains / or ~ or .), treat as dir
+				if strings.ContainsAny(a, "/~") {
+					dir = a
+				} else if strings.Contains(a, ".") {
+					key = a
+				} else {
+					dir = a
+				}
+			}
+			repoDir, err := FindRoot(dir)
+			if err != nil {
+				return fmt.Errorf("not a git repository: %w", err)
+			}
+			var gitArgs []string
+			if key != "" {
+				gitArgs = []string{"config", "--get", key}
+				if local {
+					gitArgs = []string{"config", "--local", "--get", key}
+				} else if global {
+					gitArgs = []string{"config", "--global", "--get", key}
+				}
+			} else {
+				gitArgs = []string{"config", "--list"}
+				if local {
+					gitArgs = append(gitArgs, "--local")
+				} else if global {
+					gitArgs = append(gitArgs, "--global")
+				}
+			}
+			c := exec.Command("git", gitArgs...)
+			c.Dir = repoDir
+			out, err := c.CombinedOutput()
+			if len(out) > 0 {
+				fmt.Print(string(out))
+			}
+			return err
+		},
+	}
+	c.Flags().BoolVar(&local, "local", false, "show local config only")
+	c.Flags().BoolVar(&global, "global", false, "show global config only")
+	return c
+}
+
+func gitRevertCmd() *cobra.Command {
+	var n int
+	c := &cobra.Command{
+		Use:   "revert [dir]",
+		Short: "Revert the last N commits",
+		Long: `Revert the last N commits (HEAD by default).
+
+  babi git revert
+  babi git revert -n 3
+  babi git revert ~/Projects/myrepo`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			dir := "."
+			if len(args) == 1 {
+				dir = args[0]
+			}
+			repoDir, err := FindRoot(dir)
+			if err != nil {
+				return fmt.Errorf("not a git repository: %w", err)
+			}
+			ref := "HEAD"
+			if n > 1 {
+				ref = "HEAD~" + strconv.Itoa(n-1) + "..HEAD"
+			}
+			gc := exec.Command("git", "revert", "--no-edit", ref)
+			gc.Dir = repoDir
+			gc.Stdout = os.Stdout
+			gc.Stderr = os.Stderr
+			return gc.Run()
+		},
+	}
+	c.Flags().IntVarP(&n, "number", "n", 1, "number of commits to revert")
+	return c
 }
 
 func LogCommand() *cobra.Command {
