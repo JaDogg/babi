@@ -99,6 +99,58 @@ const pyTestTmpl = `def test_one():
 const readmeTmpl = `# {{.Name}}
 `
 
+const pyGitignoreTmpl = `# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+.eggs/
+
+# UV / virtualenv
+.venv/
+venv/
+.python-version
+
+# pytest / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# mypy / ruff / black
+.mypy_cache/
+.ruff_cache/
+
+# editors
+.vscode/
+.idea/
+*.swp
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# Linux
+*~
+.fuse_hidden*
+.nfs*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+`
+
 func buildPythonUv() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "python",
@@ -148,6 +200,12 @@ func buildPythonUv() *cobra.Command {
 			// sample_test.py
 			sampleTestFile := filepath.Join(projectDir, "core", "tests", "sample_test.py")
 			err = writeTemplate(sampleTestFile, pyTestTmpl, templateData)
+			if err != nil {
+				return err
+			}
+			// .gitignore
+			gitignoreFile := filepath.Join(projectDir, ".gitignore")
+			err = writeTemplate(gitignoreFile, pyGitignoreTmpl, templateData)
 			if err != nil {
 				return err
 			}
