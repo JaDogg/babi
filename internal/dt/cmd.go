@@ -2,6 +2,7 @@ package dt
 
 import (
 	"fmt"
+	"math/rand"
 	"os"
 	"os/exec"
 	"runtime"
@@ -174,62 +175,30 @@ func Command() *cobra.Command {
 	dtNTPCmd := &cobra.Command{
 		Use:   "ntp",
 		Short: "Query NTP servers and report clock offset",
-		Long:  "Queries pool.ntp.org, time.google.com, time.cloudflare.com, and time.apple.com in parallel.\nUse --sync to apply the correction (requires root/sudo).",
+		Long:  "Queries a random NTP server and reports clock offset.\nUse --sync to apply the correction (requires root/sudo).",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			doSync, _ := cmd.Flags().GetBool("sync")
-			fmt.Println(cc.Dim("Querying NTP servers..."))
-			results := QueryAll()
 
-			fmt.Println()
-			for _, r := range results {
-				if r.Err != nil {
-					fmt.Printf("  %-22s  %s %v\n",
-						cc.Cyan(r.Server), cc.BoldRed("ERROR:"), r.Err)
-					continue
-				}
-				off := r.Offset
-				sign := "+"
-				if off < 0 {
-					sign = "-"
-					off = -off
-				}
-				offsetStr := sign + off.Round(time.Microsecond).String()
-				offsetColored := ntpOffsetColor(r.Offset, offsetStr)
-				fmt.Printf("  %-22s  %s  %s %s  %s %s\n",
-					cc.Cyan(r.Server),
-					r.Time.Format(dtFmtUTC+" UTC"),
-					cc.Dim("offset:"), offsetColored,
-					cc.Dim("rtt:"), cc.Dim(r.RTT.Round(time.Millisecond).String()),
-				)
+			r, err := queryNTPWithRetry()
+			if err != nil {
+				return err
 			}
-
-			avg, ok := AverageOffset(results)
-			if !ok {
-				return fmt.Errorf("all NTP queries failed")
-			}
-			dispAvg := avg
-			sign := "+"
-			if dispAvg < 0 {
-				sign = "-"
-				dispAvg = -dispAvg
-			}
-			avgStr := sign + dispAvg.Round(time.Microsecond).String()
-			fmt.Printf("\n%s %s\n", cc.Bold("Average offset:"), ntpOffsetColor(avg, avgStr))
 
 			if doSync {
-				ntpBin, ntpArgs := ntpSyncCmd(results)
+				fmt.Printf("%s %s\n", cc.Dim("Syncing with"), cc.Cyan(r.Server))
+				ntpBin, ntpArgs := ntpSyncCmdServer(r.Server)
 				if ntpBin == "" {
-					fmt.Printf("\n%s no suitable NTP sync tool found (install ntpdate or sntp).\n",
+					fmt.Printf("%s no suitable NTP sync tool found (install ntpdate or sntp).\n",
 						cc.BoldYellow("Sync:"))
 					return nil
 				}
 				var c *exec.Cmd
 				if runtime.GOOS == "windows" {
-					fmt.Printf("\n%s %s %s\n",
+					fmt.Printf("%s %s %s\n",
 						cc.Dim("Running:"), ntpBin, strings.Join(ntpArgs, " "))
 					c = exec.Command(ntpBin, ntpArgs...)
 				} else {
-					fmt.Printf("\n%s sudo %s %s\n",
+					fmt.Printf("%s sudo %s %s\n",
 						cc.Dim("Running:"), ntpBin, strings.Join(ntpArgs, " "))
 					syncArgs := append([]string{ntpBin}, ntpArgs...)
 					c = exec.Command("sudo", syncArgs...)
@@ -238,12 +207,25 @@ func Command() *cobra.Command {
 				c.Stderr = os.Stderr
 				return c.Run()
 			}
-
-			absAvg := avg
-			if absAvg < 0 {
-				absAvg = -absAvg
+			off := r.Offset
+			sign := "+"
+			if off < 0 {
+				sign = "-"
+				off = -off
 			}
-			if absAvg > time.Second {
+			offsetStr := sign + off.Round(time.Microsecond).String()
+			fmt.Printf("  %-22s  %s  %s %s  %s %s\n",
+				cc.Cyan(r.Server),
+				r.Time.Format(dtFmtUTC+" UTC"),
+				cc.Dim("offset:"), ntpOffsetColor(r.Offset, offsetStr),
+				cc.Dim("rtt:"), cc.Dim(r.RTT.Round(time.Millisecond).String()),
+			)
+
+			absOff := r.Offset
+			if absOff < 0 {
+				absOff = -absOff
+			}
+			if absOff > time.Second {
 				hint := "'babi dt ntp --sync'"
 				if runtime.GOOS == "windows" {
 					hint = "'babi dt ntp --sync' (requires admin)"
@@ -258,6 +240,22 @@ func Command() *cobra.Command {
 
 	dtCmd.AddCommand(dtInCmd, dtAgeCmd, dtTZCmd, dtNTPCmd)
 	return dtCmd
+}
+
+// queryNTPWithRetry picks a random server and retries with a different one on failure,
+// trying each server at most once.
+func queryNTPWithRetry() (NTPResult, error) {
+	//nolint:gosec
+	perm := rand.Perm(len(DefaultNTPServers))
+	for _, i := range perm {
+		server := DefaultNTPServers[i]
+		r := QueryNTP(server)
+		if r.Err == nil {
+			return r, nil
+		}
+		fmt.Printf("%s %s failed (%v), retrying...\n", cc.Dim("NTP:"), cc.Cyan(server), r.Err)
+	}
+	return NTPResult{}, fmt.Errorf("all NTP servers failed")
 }
 
 func ntpOffsetColor(offset time.Duration, s string) string {
@@ -275,16 +273,9 @@ func ntpOffsetColor(offset time.Duration, s string) string {
 	}
 }
 
-func ntpSyncCmd(results []NTPResult) (string, []string) {
+func ntpSyncCmdServer(server string) (string, []string) {
 	if runtime.GOOS == "windows" {
 		return "w32tm", []string{"/resync", "/force"}
-	}
-	server := "pool.ntp.org"
-	for _, r := range results {
-		if r.Err == nil {
-			server = r.Server
-			break
-		}
 	}
 	if _, err := exec.LookPath("sntp"); err == nil {
 		return "sntp", []string{"-sS", server}

@@ -7,7 +7,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -169,6 +168,14 @@ var DefaultNTPServers = []string{
 	"time.google.com",
 	"time.cloudflare.com",
 	"time.apple.com",
+	"time.windows.com",
+	"time.facebook.com",
+	"time.nist.gov",
+	"ntp.ubuntu.com",
+	"0.pool.ntp.org",
+	"1.pool.ntp.org",
+	"2.pool.ntp.org",
+	"3.pool.ntp.org",
 }
 
 // NTPResult holds the result of a single NTP query.
@@ -227,33 +234,3 @@ func QueryNTP(server string) NTPResult {
 	return res
 }
 
-// QueryAll queries all DefaultNTPServers in parallel.
-func QueryAll() []NTPResult {
-	results := make([]NTPResult, len(DefaultNTPServers))
-	var wg sync.WaitGroup
-	for i, s := range DefaultNTPServers {
-		wg.Add(1)
-		go func(i int, s string) {
-			defer wg.Done()
-			results[i] = QueryNTP(s)
-		}(i, s)
-	}
-	wg.Wait()
-	return results
-}
-
-// AverageOffset returns the mean offset from successful NTP results.
-func AverageOffset(results []NTPResult) (time.Duration, bool) {
-	var sum time.Duration
-	n := 0
-	for _, r := range results {
-		if r.Err == nil {
-			sum += r.Offset
-			n++
-		}
-	}
-	if n == 0 {
-		return 0, false
-	}
-	return sum / time.Duration(n), true
-}
