@@ -99,6 +99,32 @@ const pyTestTmpl = `def test_one():
 const readmeTmpl = `# {{.Name}}
 `
 
+const commonGitignore = `# editors
+.vscode/
+.idea/
+*.swp
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# Linux
+*~
+.fuse_hidden*
+.nfs*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+`
+
 const pyGitignoreTmpl = `# Python
 __pycache__/
 *.py[cod]
@@ -125,31 +151,7 @@ htmlcov/
 .mypy_cache/
 .ruff_cache/
 
-# editors
-.vscode/
-.idea/
-*.swp
-
-# macOS
-.DS_Store
-.AppleDouble
-.LSOverride
-._*
-.Spotlight-V100
-.Trashes
-
-# Linux
-*~
-.fuse_hidden*
-.nfs*
-
-# Windows
-Thumbs.db
-ehthumbs.db
-Desktop.ini
-$RECYCLE.BIN/
-*.lnk
-`
+` + commonGitignore
 
 func buildPythonUv() *cobra.Command {
 	c := &cobra.Command{
