@@ -26,6 +26,18 @@ Legend: 🖥️ interactive TUI &nbsp;·&nbsp; ⚡ CLI tool
    babi check
    ```
 
+-  ⚡ `ci`          Local-network CI — server, runner, and project scaffolding
+   ```sh
+   babi ci init                        # scaffold hello-world C/CMake project + babi_build.py
+   babi ci init --name my-app          # custom project name
+   babi ci init --bare                 # write only babi_build.py to current directory
+   babi ci server                      # start CI server on :8767
+   babi ci server --port 9000          # custom port
+   babi ci server --no-local-runner    # don't auto-spawn a local runner
+   babi ci runner                      # start runner (connects to localhost:8767)
+   babi ci runner --config runner.json # runner with config file
+   ```
+
 -  🖥️ `commit`      Open the commitizen commit TUI
    ```sh
    babi commit

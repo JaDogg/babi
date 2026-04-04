@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/jadogg/babi/internal/cat"
 	"github.com/jadogg/babi/internal/cf"
+	"github.com/jadogg/babi/internal/ci"
 	"github.com/jadogg/babi/internal/check"
 	cc "github.com/jadogg/babi/internal/clicolor"
 	"github.com/jadogg/babi/internal/convert"
@@ -117,6 +118,7 @@ func main() {
 		which.Command(),
 		sr.Command(),
 		gitui.GitCommand(),
+		ci.Command(),
 	)
 	initCobraColors()
 
