@@ -33,6 +33,7 @@ import (
 	"github.com/jadogg/babi/internal/tui/fm"
 	gitui "github.com/jadogg/babi/internal/tui/git"
 	tuihex "github.com/jadogg/babi/internal/tui/hex"
+	"github.com/jadogg/babi/internal/tui/sr"
 	"github.com/jadogg/babi/internal/tui/typer"
 	"github.com/jadogg/babi/internal/wc"
 	"github.com/jadogg/babi/internal/which"
@@ -114,6 +115,7 @@ func main() {
 		ls.Command(),
 		fscmd.Command(),
 		which.Command(),
+		sr.Command(),
 		gitui.GitCommand(),
 	)
 	initCobraColors()
