@@ -129,6 +129,7 @@ func buildServerCmd() *cobra.Command {
 	var artifactsDir string
 	var dataDir string
 	var noLocalRunner bool
+	var expose bool
 
 	c := &cobra.Command{
 		Use:   "server",
@@ -138,7 +139,7 @@ func buildServerCmd() *cobra.Command {
   babi ci server
   babi ci server --port 8767 --projects ./projects.json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runServer(port, projectsFile, artifactsDir, dataDir, !noLocalRunner)
+			return runServer(port, projectsFile, artifactsDir, dataDir, !noLocalRunner, expose)
 		},
 	}
 	c.Flags().IntVarP(&port, "port", "p", 8767, "port to listen on")
@@ -146,10 +147,11 @@ func buildServerCmd() *cobra.Command {
 	c.Flags().StringVar(&artifactsDir, "artifacts", "artifacts", "directory to save build artifacts")
 	c.Flags().StringVar(&dataDir, "data", ".", "directory to store builds.json and logs/")
 	c.Flags().BoolVar(&noLocalRunner, "no-local-runner", false, "do not spawn a local runner")
+	c.Flags().BoolVar(&expose, "expose", false, "bind to 0.0.0.0 (expose to local network)")
 	return c
 }
 
-func runServer(port int, projectsFile, artifactsDir, dataDir string, spawnLocalRunner bool) error {
+func runServer(port int, projectsFile, artifactsDir, dataDir string, spawnLocalRunner, expose bool) error {
 	// Ensure directories exist
 	if err := os.MkdirAll(artifactsDir, 0755); err != nil {
 		return fmt.Errorf("create artifacts dir: %w", err)
@@ -178,8 +180,12 @@ func runServer(port int, projectsFile, artifactsDir, dataDir string, spawnLocalR
 
 	mux := srv.handler(http.FS(sub))
 
-	addr := fmt.Sprintf(":%d", port)
-	fmt.Printf("[server] babi CI server listening on http://localhost%s\n", addr)
+	host := "127.0.0.1"
+	if expose {
+		host = "0.0.0.0"
+	}
+	addr := fmt.Sprintf("%s:%d", host, port)
+	fmt.Printf("[server] babi CI server listening on http://%s\n", addr)
 	fmt.Printf("[server] projects:  %s\n", projectsFile)
 	fmt.Printf("[server] artifacts: %s\n", absArtifacts)
 	fmt.Printf("[server] data dir:  %s\n", absData)

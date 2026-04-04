@@ -33,6 +33,7 @@ Legend: 🖥️ interactive TUI &nbsp;·&nbsp; ⚡ CLI tool
    babi ci init --bare                 # write only babi_build.py to current directory
    babi ci server                      # start CI server on :8767
    babi ci server --port 9000          # custom port
+   babi ci server --expose             # bind to 0.0.0.0 (local network access)
    babi ci server --no-local-runner    # don't auto-spawn a local runner
    babi ci runner                      # start runner (connects to localhost:8767)
    babi ci runner --config runner.json # runner with config file
